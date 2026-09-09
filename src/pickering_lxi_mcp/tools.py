@@ -80,6 +80,13 @@ def list_endpoints(session: ChassisSession) -> dict[str, Any]:
     return {"topology": session.topology.name, "endpoints": session.list_endpoints()}
 
 
+@tool("list_fabric_domains", Tier.OBSERVE, "The independently leasable units of this fixture, and what a lease over given endpoints must cover.")
+def list_fabric_domains(
+    session: ChassisSession, for_endpoints: list[str] | None = None
+) -> dict[str, Any]:
+    return session.fabric_domains(for_endpoints)
+
+
 @tool("list_routes", Tier.OBSERVE, "Logical connections currently held open by this server.")
 def list_routes(session: ChassisSession) -> dict[str, Any]:
     return {"routes": session.list_routes()}

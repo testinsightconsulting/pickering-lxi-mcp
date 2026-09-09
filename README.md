@@ -144,6 +144,7 @@ PASS  interlocks: the short is refused as a graph, not as a request, and the fix
 | `chassis_identify` | observe | Backend, driver, topology, current status |
 | `list_cards` | observe | Cards, subunits, matrix sizes, closure limits |
 | `list_endpoints` | observe | The logical names this topology can route between |
+| `list_fabric_domains` | observe | The independently leasable units, and what a lease over given endpoints must cover |
 | `list_routes` | observe | Connections currently held open |
 | `plan_route` | observe | **Dry run**: crosspoints a route would close, and whether it is permitted |
 | `subunit_state` | observe | Every closed crosspoint on one subunit |

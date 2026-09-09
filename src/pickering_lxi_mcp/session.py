@@ -211,6 +211,27 @@ class ChassisSession:
     def list_cards(self) -> list[dict[str, Any]]:
         return [card.as_dict() for card in self.backend.cards()]
 
+    def fabric_domains(self, for_endpoints: list[str] | None = None) -> dict[str, Any]:
+        """The units that can be leased independently, and what a lease must cover.
+
+        Answers the question a broker has to ask before granting anything: not
+        "which endpoints does this test want" but "which whole domains do those
+        endpoints drag in". The two are rarely the same.
+        """
+
+        domains = (
+            self.topology.domains_for(for_endpoints)
+            if for_endpoints
+            else self.topology.fabric_domains()
+        )
+        all_domains = self.topology.fabric_domains()
+        return {
+            "topology": self.topology.name,
+            "domain_count": len(all_domains),
+            "requested_endpoints": list(for_endpoints or []),
+            "domains": [d.as_dict() for d in domains],
+        }
+
     def list_endpoints(self) -> list[dict[str, Any]]:
         return [ep.as_dict() for ep in self.topology.endpoints.values()]
 

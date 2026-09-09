@@ -68,7 +68,27 @@ every other line in it.
 
 > The example bench is **28 endpoints in 1 fabric domain** — both patch leads tie the matrix and
 > both multiplexers together. Remove the leads and it becomes three. The number is computed from
-> the topology, never declared.
+> the topology, never declared: `list_fabric_domains`, or `Topology.fabric_domains()`.
+
+### What a fabric domain does not respect
+
+The chassis → card → subunit hierarchy. The domain partition cuts across it in *both*
+directions, and assuming otherwise is the most likely modelling error:
+
+| | | |
+|---|---|---|
+| **Below** | A subunit is the floor and is never split | Every row of a matrix reaches every column, so all 8×16 of `matrix_a/sub1` is one domain. A caller who wants four columns gets all twenty-four lines. |
+| **Sideways** | One card can host several domains | With the patch leads removed, `mux_b` hosts `mux_b/sub1` and `mux_b/sub2` as two independently leasable domains. |
+| **Above** | One patch lead merges chassis | A single lead from a column in chassis 1 to a row in chassis 2 makes both matrices one domain, routable end to end in two closures. |
+
+So "this card belongs to that fabric" is not a well-formed statement — cards do not belong to
+domains, *subunits* do, and which subunits share a domain is a fact about the wiring rather than
+about the enclosure.
+
+**Lease scope** — the consequence for a broker. You do not lease the endpoints you asked for; you
+lease every domain they touch, whole. `domains_for(["dut_pin_a1"])` on the example bench returns
+one domain containing all 28 endpoints. Expand the request to whole domains *before* acquiring,
+or the all-or-nothing guarantee is over a set that does not match what actually gets used.
 
 ---
 

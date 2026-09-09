@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -78,6 +79,36 @@ class Operation:
 
     def __str__(self) -> str:
         return f"{self.card}/sub{self.subunit}({self.row},{self.column})"
+
+
+@dataclass(frozen=True)
+class FabricDomain:
+    """The largest set of lines that can become electrically common.
+
+    The unit that has to be owned, locked and leased as a whole, because a
+    safety question about any line in it can only be answered by reading every
+    other line in it.
+
+    It does not respect the chassis / card / subunit hierarchy, and that is the
+    thing most likely to be assumed wrongly. A subunit is the floor -- every row
+    of a matrix reaches every column, so a subunit is never split across
+    domains. Above that the boundary follows the wiring: one card with two
+    unpatched subunits hosts two domains, and one patch lead merges two chassis
+    into one. Containment in the hardware tree tells you nothing either way.
+    """
+
+    domain_id: str
+    subunits: tuple[tuple[str, int], ...]
+    endpoints: tuple[str, ...]
+    line_count: int
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "domain_id": self.domain_id,
+            "subunits": [{"card": c, "subunit": n} for c, n in self.subunits],
+            "endpoints": list(self.endpoints),
+            "line_count": self.line_count,
+        }
 
 
 @dataclass(frozen=True)
@@ -200,6 +231,74 @@ class Topology:
             connect(a, b, None)
 
         return adjacency
+
+    def fabric_domains(self) -> tuple[FabricDomain, ...]:
+        """Partition this topology into independently leasable units.
+
+        Connected components of the switch graph with EVERY crosspoint treated
+        as closable -- the question is what *could* become common, not what
+        currently is. Two domains can be held by two owners at once without
+        either being able to affect the other; anything inside one domain cannot
+        be subdivided, however much a caller only wants four of its columns.
+        """
+
+        parent: dict[Node, Node] = {}
+
+        def find(node: Node) -> Node:
+            parent.setdefault(node, node)
+            while parent[node] != node:
+                parent[node] = parent[parent[node]]
+                node = parent[node]
+            return node
+
+        def union(a: Node, b: Node) -> None:
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[ra] = rb
+
+        for node, edges in self._adjacency.items():
+            find(node)
+            for neighbour, _op in edges:
+                union(node, neighbour)
+
+        grouped: dict[Node, list[Node]] = {}
+        for node in parent:
+            grouped.setdefault(find(node), []).append(node)
+
+        by_node: dict[Node, list[str]] = {}
+        for name, endpoint in self.endpoints.items():
+            by_node.setdefault(endpoint.node, []).append(name)
+
+        domains: list[FabricDomain] = []
+        for nodes in grouped.values():
+            subunits = tuple(sorted({(n[0], n[1]) for n in nodes}))
+            names = sorted(name for n in nodes for name in by_node.get(n, ()))
+            domains.append(
+                FabricDomain(
+                    # Named for its lowest-sorting subunit, so a domain keeps the
+                    # same id as long as the wiring does.
+                    domain_id=f"{subunits[0][0]}/sub{subunits[0][1]}",
+                    subunits=subunits,
+                    endpoints=tuple(names),
+                    line_count=len(nodes),
+                )
+            )
+        return tuple(sorted(domains, key=lambda d: d.domain_id))
+
+    def domains_for(self, endpoints: Iterable[str]) -> tuple[FabricDomain, ...]:
+        """Which domains a lease covering these endpoints has to include, whole.
+
+        The gap between what a caller asks for and what they must be given. Ask
+        for one column of a matrix and this returns the matrix -- and, if a patch
+        lead runs from it to a multiplexer in another chassis, that too.
+        """
+
+        wanted = [self.endpoint(name) for name in endpoints]
+        return tuple(
+            domain
+            for domain in self.fabric_domains()
+            if any((ep.node[0], ep.node[1]) in set(domain.subunits) for ep in wanted)
+        )
 
     def find_path(self, source: str, target: str) -> SwitchPath:
         """Fewest switch closures between two named endpoints.

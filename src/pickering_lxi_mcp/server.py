@@ -128,6 +128,18 @@ def list_endpoints() -> dict[str, Any]:
 
 
 @server.tool()
+def list_fabric_domains(for_endpoints: list[str] | None = None) -> dict[str, Any]:
+    """The independently leasable units of this fixture.
+
+    A fabric domain is the largest set of lines that can become electrically
+    common, so it is what must be owned as a whole. Pass `for_endpoints` to ask
+    the other direction: which whole domains a lease over those endpoints has to
+    cover, which is usually more than the caller asked for.
+    """
+    return _call("list_fabric_domains", for_endpoints=for_endpoints)
+
+
+@server.tool()
 def list_routes() -> dict[str, Any]:
     """Logical connections currently held open by this server."""
     return _call("list_routes")
