@@ -9,6 +9,10 @@ Run against the simulator (default) or a real chassis:
         pickering-lxi-mcp                                   # vendor driver, simulated cards
     PICKERING_LXI_TOPOLOGY=./my_bench.json pickering-lxi-mcp
 
+Or as a network service, so several agents can share one rack:
+
+    pickering-lxi-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+
 The tool bodies are one-liners on purpose. All behaviour lives in
 ``tools.call``, so the MCP binding and the CI walkthroughs exercise exactly the
 same dispatch path -- a walkthrough that passes is evidence about the server,
@@ -17,6 +21,8 @@ not about a parallel test-only implementation.
 
 from __future__ import annotations
 
+import argparse
+import os
 from typing import Any
 
 try:  # mcp >= 2.0 renamed FastMCP to MCPServer
@@ -216,8 +222,113 @@ def release_chassis(token: str) -> dict[str, Any]:
     return _call("release_chassis", token=token)
 
 
-def main() -> None:
-    server.run()
+# -- transports ------------------------------------------------------------
+#
+# stdio is the default: one client, launched as a subprocess, no network. The
+# HTTP transports exist for the other shape -- a chassis on the bench and
+# several agents on the network that need to reach it.
+#
+# Note what is deliberately NOT per-connection. There is one `SESSION`, module
+# level, shared by every client of this process, because there is one physical
+# chassis. Two agents connecting over HTTP are two agents reaching for the same
+# relays, and the reservation is what arbitrates between them -- over stdio it
+# is mostly bookkeeping, over HTTP it is doing the job it was built for. The
+# corollary is that one process serves one chassis; a second chassis is a
+# second process on a second port, not a second session in this one.
+#
+# `--stateless-http` refers to the MCP session, not the chassis: it lets each
+# request stand alone at the protocol level, which suits a load balancer. The
+# chassis state behind it is the same either way.
+
+TRANSPORTS = ("stdio", "streamable-http", "sse")
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    env = os.environ
+    parser = argparse.ArgumentParser(
+        prog="pickering-lxi-mcp",
+        description="MCP server for Pickering PXI/LXI switching.",
+        epilog=(
+            "Chassis selection is by environment: PICKERING_LXI_ADDRESS (IP or PXI; "
+            "unset means the built-in simulator), PICKERING_LXI_TOPOLOGY, "
+            "PICKERING_LXI_SIM_CARD."
+        ),
+    )
+    parser.add_argument(
+        "--transport",
+        choices=TRANSPORTS,
+        default=env.get("PICKERING_LXI_TRANSPORT", "stdio"),
+        help="MCP transport (default: stdio; env PICKERING_LXI_TRANSPORT)",
+    )
+    parser.add_argument(
+        "--host",
+        default=env.get("PICKERING_LXI_HTTP_HOST", "127.0.0.1"),
+        help="HTTP bind address (default: 127.0.0.1; env PICKERING_LXI_HTTP_HOST)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(env.get("PICKERING_LXI_HTTP_PORT", "8000")),
+        help="HTTP port (default: 8000; env PICKERING_LXI_HTTP_PORT)",
+    )
+    parser.add_argument(
+        "--path",
+        default=env.get("PICKERING_LXI_HTTP_PATH", "/mcp"),
+        help="HTTP endpoint path (default: /mcp; env PICKERING_LXI_HTTP_PATH)",
+    )
+    parser.add_argument(
+        "--stateless-http",
+        action="store_true",
+        default=env.get("PICKERING_LXI_STATELESS_HTTP", "").lower() in {"1", "true", "yes"},
+        help="Treat each HTTP request as its own MCP session (env PICKERING_LXI_STATELESS_HTTP)",
+    )
+    parser.add_argument("--version", action="version", version=f"pickering-lxi-mcp {__version__}")
+    return parser.parse_args(argv)
+
+
+def run(
+    transport: str = "stdio",
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    path: str = "/mcp",
+    stateless_http: bool = False,
+) -> None:
+    """Start the server on one transport.
+
+    The HTTP keyword arguments are passed through to the SDK, which grew them at
+    different times; anything the installed version does not take is dropped and
+    its own default applies rather than the call failing.
+    """
+
+    if transport == "stdio":
+        server.run()
+        return
+
+    options: dict[str, Any] = {"host": host, "port": port, "stateless_http": stateless_http}
+    if transport == "streamable-http":
+        options["streamable_http_path"] = path
+    else:
+        options["mount_path"] = path
+
+    try:
+        server.run(transport=transport, **options)
+    except TypeError:  # pragma: no cover - older SDKs configure this on settings
+        settings = getattr(server, "settings", None)
+        for key, value in options.items():
+            if settings is not None and hasattr(settings, key):
+                setattr(settings, key, value)
+        server.run(transport=transport)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = _parse_args(argv)
+    run(
+        transport=args.transport,
+        host=args.host,
+        port=args.port,
+        path=args.path,
+        stateless_http=args.stateless_http,
+    )
 
 
 if __name__ == "__main__":

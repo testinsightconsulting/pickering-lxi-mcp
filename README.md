@@ -27,6 +27,16 @@ Point any MCP client at it:
 { "mcpServers": { "switching": { "command": "pickering-lxi-mcp" } } }
 ```
 
+Or run it as a network service and let several agents share the rack:
+
+```bash
+pickering-lxi-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+```
+
+```json
+{ "mcpServers": { "switching": { "url": "http://lab-host:8000/mcp" } } }
+```
+
 ## The problem this is actually solving
 
 On a programmable supply, the dangerous mistake is a number: 400 V where 4 V was meant. On a switching matrix, the dangerous mistake is a **graph**.
@@ -137,6 +147,38 @@ Arming takes a literal acknowledgement — `confirm="the fixture is safe to ener
 | `PICKERING_LXI_TIMEOUT_MS` | `5000` | Session timeout |
 
 The default is the simulator on purpose: the interesting failure mode is a server that silently reaches for a rack, not one that refuses to.
+
+## Where the pieces run
+
+| Flag / variable | Default | Meaning |
+|---|---|---|
+| `--transport` / `PICKERING_LXI_TRANSPORT` | `stdio` | `stdio`, `streamable-http` or `sse` |
+| `--host` / `PICKERING_LXI_HTTP_HOST` | `127.0.0.1` | HTTP bind address |
+| `--port` / `PICKERING_LXI_HTTP_PORT` | `8000` | HTTP port |
+| `--path` / `PICKERING_LXI_HTTP_PATH` | `/mcp` | HTTP endpoint path |
+| `--stateless-http` / `PICKERING_LXI_STATELESS_HTTP` | off | Each HTTP request stands alone at the MCP protocol level |
+
+Three deployments, and the only thing that actually constrains them is where the switching driver has to live:
+
+**One workstation, stdio.** The MCP client launches this server as a subprocess, so agent, client and server share a host. The *chassis* need not: an LXI unit is reached over IP, so `PICKERING_LXI_ADDRESS=192.168.1.50` works from any host on that network. This is the right shape for one engineer at one bench.
+
+**Lab-side service, streamable HTTP.** The server runs near the rack and agents connect over the network from wherever they are. This is the shape that matters once more than one agent, or more than one person, needs the same fixture.
+
+**Local PXI cards.** `PICKERING_LXI_ADDRESS=PXI` means the ClientBridge driver is talking to cards in the chassis this process is running in, so the server must run on the PXI controller itself. Everything above it can still be remote — run it there with `--transport streamable-http` and the agents stay wherever they are.
+
+One process serves one chassis. There is a single chassis session shared by every client of the process, because there is a single set of physical relays, and the reservation is what arbitrates between callers. Over stdio that is mostly bookkeeping; over HTTP it is doing the job it was built for:
+
+```
+agent-a  reserve_chassis                    -> token 8fa0a571
+agent-b  reserve_chassis                    -> ReservationError: chassis is reserved by 'agent-a'
+agent-b  list_routes                        -> ok            (observation is never gated)
+agent-a  route_signal psu_pos -> dut_pin_a1 -> open
+agent-b  route_signal gnd     -> dut_pin_a1 -> InterlockError: would make 'psu_pos' and 'gnd'
+                                                electrically common
+agent-b  subunit_state matrix_a/1           -> closed_count = 1   (one rack, one truth)
+```
+
+A second chassis is a second process on a second port, not a second session in this one.
 
 There are two distinct kinds of simulation here, and they answer different questions. `SimBackend` (the default) is an in-process state machine — no vendor software required, runs in CI, answers *is the routing logic right*. `PICKERING_LXI_SIM_CARD=1` runs the **real** ClientBridge driver against cards that are not in the rack — answers *is the driver integration right*. Use both, in that order.
 
