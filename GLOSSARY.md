@@ -64,6 +64,11 @@ Shortest path by number of closures, because relay closures are the wear item.
 **Route** — a SwitchPath that has been applied and is being held open, with an owner and an id.
 Route ids are undirected: `route_id("a","b") == route_id("b","a")`, rendered `a<->b`.
 
+**DUT** — the thing under test. A *role in a contract*, not a class of device: the same box is a
+DUT this week and part of the fixture next week. It may perfectly well have a CLI, an API and an
+MCP server of its own, and be a leased resource like any other. What it is not is a **source of
+truth for the interlock** — see *asserted* below.
+
 **Fabric domain** *(coined here)* — a set of lines that can become electrically common with each
 other. Formally: a connected component of the switch graph with *every* crosspoint treated as
 closable, not merely the ones closed now. This is the unit that must be leased, locked and
@@ -119,6 +124,32 @@ model fills in from context; a fixed string is something it has to mean.
 
 **Plan** — a dry run. Computes the path and runs the interlocks against it, switches nothing,
 needs no reservation. The tool an agent should reach for first.
+
+**Asserted** vs **verified** — the two kinds of fact a topology contains, and the more useful
+distinction than "does this device have a driver".
+
+*Verified* facts are read back from the driver: which cards are present, how big each subunit is,
+which crosspoints are closed. `verify_topology` catches a wrong one.
+
+*Asserted* facts are declared by whoever wrote the file and taken on trust: that a cable runs
+between these two lines, that the DUT joins these two pins, that this pair must never meet. **No
+driver can confirm any of them — a wire is not a register.** They are load-bearing safety
+infrastructure that nothing checks, so `verify_topology` reports them explicitly rather than
+letting a clean result imply more than it means.
+
+Why the DUT's own API does not fix this, even when it has one:
+
+* **Circularity.** The DUT is the unknown under test. An interlock that trusts it to report its own
+  continuity fails exactly when the DUT is faulty — which is the case it exists for.
+* **Availability.** It may be unpowered, crashed or mid-boot at the moment you switch. Those are
+  states you deliberately switch into.
+* **Scope.** Electrical continuity between two pins is not in a management API. "show interface"
+  does not tell you that pin 3 is DC-continuous with pin 7.
+
+So the interlock is local, synchronous and offline by construction, and what it knows about
+anything that is not a switch is asserted. That is the whole meaning of *only what the contract
+asserts*: not that the DUT is unreachable, but that the facts the fabric's safety depends on come
+from a human writing them down, not from asking the device.
 
 **Violation** vs **refusal** — a *violation* is a rule broken by a state (`describe_violations`
 lists all of them, for a state someone else produced). A *refusal* is a rule that stopped an

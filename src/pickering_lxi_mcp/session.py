@@ -316,6 +316,21 @@ class ChassisSession:
         On the simulator this is trivially true, which is the point: the same
         call against real hardware is what catches a topology written for last
         quarter's rack.
+
+        It also reports its own blind spot, which matters more than the checks.
+        A topology contains two kinds of fact:
+
+        *Verified* facts are read back from the driver -- which cards are there,
+        how big each subunit is, which crosspoints are closed. A wrong one is
+        caught here.
+
+        *Asserted* facts are declared by whoever wrote the file and taken on
+        trust -- that a cable runs between these two lines, that the DUT joins
+        these two pins, that this pair must never meet. No driver can confirm
+        any of them: a wire is not a register. They are load-bearing safety
+        infrastructure that nothing verifies, so a report that listed only what
+        it checked would leave the reader more confident than the evidence
+        allows.
         """
 
         actual = {card.alias: card for card in self.backend.cards()}
@@ -342,7 +357,38 @@ class ChassisSession:
             problems.append(f"card {alias!r} is in the chassis but not in the topology")
 
         problems.extend(self._vacuous_rules())
-        return {"ok": not problems, "problems": problems}
+        return {
+            "ok": not problems,
+            "problems": problems,
+            "verified": [
+                f"{len(self.topology.cards)} card(s) present and the right shape",
+                "every subunit's rows and columns match what the driver reports",
+            ],
+            "asserted": self._asserted_facts(),
+        }
+
+    def _asserted_facts(self) -> list[str]:
+        """What this topology takes on trust, stated so nobody mistakes it for checked."""
+
+        notes: list[str] = []
+        if self.topology.links:
+            notes.append(
+                f"{len(self.topology.links)} declared link(s) — a cable or a bridge inside "
+                "another device. No driver can confirm one; if a real link is missing here, "
+                "the interlock reasons over a fixture less connected than the rack."
+            )
+        if self.policy.forbidden_pairs:
+            notes.append(
+                f"{len(self.policy.forbidden_pairs)} forbidden pair(s) — the safety rules "
+                "themselves are a claim about what would damage this fixture, not a "
+                "measurement of it."
+            )
+        notes.append(
+            f"{len(self.topology.endpoints)} endpoint name(s) — that a given line is wired to "
+            "the instrument or pin the name says. The driver reports lines, never what is on "
+            "the other end of them."
+        )
+        return notes
 
     def _vacuous_rules(self) -> list[str]:
         """Safety rules that can never fire, which is almost always a wiring error.

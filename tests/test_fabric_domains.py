@@ -237,7 +237,9 @@ def make_session(topology):
 
 
 def test_the_shipped_topology_declares_no_vacuous_rules(session):
-    assert session.verify_topology() == {"ok": True, "problems": []}
+    report = session.verify_topology()
+    assert report["ok"] is True
+    assert report["problems"] == []
 
 
 def test_a_rule_that_can_never_fire_is_reported():

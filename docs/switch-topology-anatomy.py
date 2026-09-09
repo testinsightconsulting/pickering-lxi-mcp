@@ -117,9 +117,9 @@ tag(11.32, 8.02, 8)
 for i in range(6):
     ax.add_line(Line2D([col_x(i), col_x(i)], [7.35, 6.15], color=MUTED, lw=0.9, zorder=3))
 rbox(3.95, 4.55, 8.25, 6.15, edge=INK, fill=WHITE, lw=1.5, r=0.08, z=4)
-txt(8.05, 5.86, "DUT", 12.5, INK, weight="bold", ha="right")
-txt(8.05, 5.46, "not an instrument, not a card,\nnot addressable by any driver", 8.3, MUTED,
-    ha="right", style="italic")
+txt(8.05, 5.88, "DUT", 12.5, INK, weight="bold", ha="right")
+txt(6.10, 5.32, "may have a driver and a\nserver of its own — what the\nfabric relies on is asserted,\nnot read", 8.2, MUTED,
+    ha="left", va="center", style="italic")
 for i in range(6):
     txt(col_x(i), 6.02, f"a{i+1}", 7.2, MUTED, ha="center")
 ax.add_patch(FancyArrowPatch((col_x(0), 5.80), (col_x(3), 5.80), arrowstyle="-",
@@ -135,15 +135,15 @@ tag(4.02, 6.42, 9)
 
 txt(8.62, 6.58, "The DUT joins a1 to a4 inside itself.", 9.4, INK, va="top", weight="bold")
 txt(8.62, 6.24,
-    "No driver can see that — connectivity through a\n"
-    "bridge is a property of the bridge. But it is\n"
-    "declarable, in exactly the shape of a patch lead:\n"
-    "a link between the two lines those pins sit on.\n"
-    "The file never describes the DUT's internals, only\n"
-    "that these two ends come out common.\n\n"
-    "Declared, it merges the halves into one domain and\n"
-    "the interlock holds. Undeclared, gnd → a1 would\n"
-    "have been allowed.",
+    "The DUT may have a CLI, an API, a server of its own —\n"
+    "and the interlock still must not ask it. It is the\n"
+    "unknown under test: trusting it to report its own\n"
+    "continuity fails exactly when it is faulty. It may be\n"
+    "unpowered at the moment you switch. And continuity is\n"
+    "not in a management API anyway.\n\n"
+    "So the bridge is declared, in the shape of a patch\n"
+    "lead. Declared, the halves become one domain and the\n"
+    "interlock holds. Undeclared, gnd → a1 is allowed.",
     8.5, MUTED, va="top", ls=1.6)
 
 # ── legend ───────────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ for cx, w, name, sub, hot in (
     (3.55, 3.9, "pickering-lxi-mcp", "everything above\n= one switch topology", True),
     (8.30, 2.7, "scope-mcp", "Keysight", False),
     (12.55, 2.7, "testcenter-mcp", "Spirent", False),
-    (16.65, 3.3, "DUT", "no server, no driver —\nonly what the contract asserts", False)):
+    (16.65, 3.3, "DUT", "a role, not a kind of box.\nMay have a server of its own", False)):
     rbox(cx - w/2, 0.80, cx + w/2, 2.05, edge=ACC if hot else LINE,
          fill=ACCF if hot else WHITE, lw=1.6 if hot else 1.2, r=0.08, z=3)
     txt(cx, 1.70, name, 10, ACC if hot else INK, weight="bold", ha="center")

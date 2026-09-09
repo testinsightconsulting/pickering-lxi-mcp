@@ -173,7 +173,20 @@ def test_plan_is_a_dry_run(session):
 
 
 def test_verify_topology_agrees_with_the_simulator(session):
-    assert session.verify_topology() == {"ok": True, "problems": []}
+    report = session.verify_topology()
+    assert report["ok"] is True
+    assert report["problems"] == []
+
+
+def test_verify_topology_reports_what_it_could_not_check(session):
+    """A report listing only its checks would leave a reader over-confident."""
+    report = session.verify_topology()
+    assert report["verified"], "it says what it did confirm"
+
+    asserted = " ".join(report["asserted"])
+    assert "declared link" in asserted, "a wire is not a register"
+    assert "forbidden pair" in asserted, "the rules are a claim, not a measurement"
+    assert "endpoint name" in asserted, "the driver never sees what a line is wired to"
 
 
 def test_verify_topology_notices_a_rack_that_moved_on(bench):
