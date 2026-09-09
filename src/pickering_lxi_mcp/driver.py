@@ -395,14 +395,50 @@ class PilxiBackend:
             raise DriverError(f"card {alias!r} could not report ({row},{column}): {exc}") from exc
 
     def view_subunit(self, alias: str, subunit: int) -> list[list[bool]]:
+        """One driver call for the whole subunit, not one per crosspoint.
+
+        PIPLX_ViewSub returns the subunit as a packed bitmask. Reading it
+        crosspoint by crosspoint would be rows x columns round trips -- 128 of
+        them for an 8x16, each one a network hop to an LXI chassis. That turns
+        the cheapest tool in the server into its slowest, which matters more
+        than it looks: observation is the thing agents do constantly, and under
+        the session lock a slow read is a read that delays switching.
+        """
+
         info = self._info[alias].subunit(subunit)
+        packed = self._view_sub_words(alias, subunit)
         return [
-            [self.view_crosspoint(alias, subunit, r, c) for c in range(1, info.columns + 1)]
+            [
+                self._bit(packed, (r - 1) * info.columns + (c - 1))
+                for c in range(1, info.columns + 1)
+            ]
             for r in range(1, info.rows + 1)
         ]
 
     def closed_count(self, alias: str, subunit: int) -> int:
-        return sum(1 for row in self.view_subunit(alias, subunit) for bit in row if bit)
+        info = self._info[alias].subunit(subunit)
+        packed = self._view_sub_words(alias, subunit)
+        bits = info.rows * info.columns
+        return sum(
+            1 for index in range(bits) if self._bit(packed, index)
+        )
+
+    def _view_sub_words(self, alias: str, subunit: int) -> list[int]:
+        card = self._card(alias)
+        try:
+            return list(card.ViewSub(subunit))
+        except Exception as exc:
+            raise DriverError(
+                f"card {alias!r} could not report subunit {subunit}: {exc}"
+            ) from exc
+
+    @staticmethod
+    def _bit(packed: list[int], index: int) -> bool:
+        """Bit layout is the vendor's: (row-1) * columns + (column-1), LSB first."""
+        word, offset = divmod(index, 32)
+        if word >= len(packed):
+            return False
+        return bool(packed[word] >> offset & 1)
 
     def clear_subunit(self, alias: str, subunit: int) -> None:
         card = self._card(alias)

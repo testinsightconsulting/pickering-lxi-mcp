@@ -109,3 +109,48 @@ def test_an_address_without_the_vendor_driver_fails_loudly():
     with pytest.raises(DriverError) as exc:
         build_backend((small_card(),), env={"PICKERING_LXI_ADDRESS": "203.0.113.1"})
     assert "pilxi" in str(exc.value) or "ClientBridge" in str(exc.value)
+
+
+# --------------------------------------------------------------------------
+# Bit layout of the packed subunit read. The vendor's convention, so it is
+# worth pinning: switch = (row - 1) * columns + (column - 1), LSB first within
+# each 32-bit word. Getting this wrong would misreport the fixture rather than
+# fail, which is the kind of bug that survives a long time.
+# --------------------------------------------------------------------------
+
+
+def test_packed_subunit_bit_layout():
+    from pickering_lxi_mcp.driver import PilxiBackend
+
+    bit = PilxiBackend._bit
+    assert bit([0b1], 0) is True
+    assert bit([0b10], 1) is True
+    assert bit([0b10], 0) is False
+
+    # crosspoint (2,1) on a 16-column subunit is switch 16, still word 0
+    assert bit([1 << 16], 16) is True
+    # switch 32 is the first bit of the second word
+    assert bit([0, 0b1], 32) is True
+    assert bit([0, 0b1], 31) is False
+    # a short packed read must not raise; absent words read as open
+    assert bit([0], 4096) is False
+
+
+def test_packed_read_decodes_to_the_same_grid_the_simulator_would_give():
+    from pickering_lxi_mcp.driver import PilxiBackend
+
+    rows, columns = 4, 8
+    closed = {(1, 1), (2, 3), (4, 8)}
+    words = [0, 0]
+    for r, c in closed:
+        index = (r - 1) * columns + (c - 1)
+        words[index // 32] |= 1 << (index % 32)
+
+    grid = [
+        [PilxiBackend._bit(words, (r - 1) * columns + (c - 1)) for c in range(1, columns + 1)]
+        for r in range(1, rows + 1)
+    ]
+    recovered = {
+        (r + 1, c + 1) for r, line in enumerate(grid) for c, on in enumerate(line) if on
+    }
+    assert recovered == closed

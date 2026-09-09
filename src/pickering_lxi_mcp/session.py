@@ -17,9 +17,11 @@ teardown that is correct and one that is usually correct.
 
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from functools import wraps
 from typing import Any
 
 from . import interlocks
@@ -27,6 +29,22 @@ from .driver import Backend
 from .errors import DriverError, InterlockError, ReservationError
 from .interlocks import InterlockPolicy
 from .topology import Operation, SwitchPath, Topology
+
+
+def guarded(method: Any) -> Any:
+    """Run this method while holding the session lock.
+
+    Applied to everything that touches the route table, the reservation or the
+    armed flag -- and, for mutations, across the switching too, so that
+    check-and-apply is one indivisible step.
+    """
+
+    @wraps(method)
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 @dataclass
@@ -79,6 +97,26 @@ class ChassisSession:
     routes: dict[str, Route] = field(default_factory=dict)
     journal: list[str] = field(default_factory=list)
 
+    # One agent is routinely several threads: the MCP SDK runs synchronous tool
+    # bodies in a worker pool, so two tool calls on one connection -- let alone
+    # two connections under one lease -- genuinely execute in parallel.
+    #
+    # That breaks the interlock unless the check and the switching are one
+    # atomic step. "Is this route safe given what is closed" and "close it" must
+    # not be separated, because between them another thread can close the
+    # crosspoint that makes the answer wrong. Both routes pass their own check,
+    # both apply, and the composition is the short neither of them asked for.
+    #
+    # So every mutation holds this lock across check-and-apply. Serialising is
+    # free: a relay takes milliseconds to settle, which dwarfs anything the lock
+    # costs, and one process owns one fabric, so a process-local lock is the
+    # whole answer -- no distributed coordination at the device level.
+    #
+    # Observation deliberately does NOT hold it while touching hardware. Reads
+    # are the thing agents do constantly, and a read that blocks switching would
+    # be a worse bug than a read that is a few milliseconds stale.
+    _lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
+
     @classmethod
     def build(cls, backend: Backend, topology: Topology) -> ChassisSession:
         return cls(
@@ -89,6 +127,7 @@ class ChassisSession:
 
     # -- observe: never gated ---------------------------------------------
     def describe(self) -> dict[str, Any]:
+        # backend I/O first, outside the lock; the counters below are a snapshot
         info = dict(self.backend.describe())
         info.update(
             {
@@ -108,9 +147,11 @@ class ChassisSession:
     def list_endpoints(self) -> list[dict[str, Any]]:
         return [ep.as_dict() for ep in self.topology.endpoints.values()]
 
+    @guarded
     def list_routes(self) -> list[dict[str, Any]]:
         return [r.as_dict() for r in self.routes.values()]
 
+    @guarded
     def plan(self, source: str, target: str) -> dict[str, Any]:
         """Compute a route and dry-run the interlocks against it.
 
@@ -134,6 +175,7 @@ class ChassisSession:
         result["refusal"] = None
         return result
 
+    @guarded
     def crosspoint(self, card: str, subunit: int, row: int, column: int) -> dict[str, Any]:
         closed = self.backend.view_crosspoint(card, subunit, row, column)
         return {
@@ -170,6 +212,7 @@ class ChassisSession:
             "closed": closed,
         }
 
+    @guarded
     def interlock_status(self) -> dict[str, Any]:
         return {
             "armed": self.armed,
@@ -212,6 +255,7 @@ class ChassisSession:
         return {"ok": not problems, "problems": problems}
 
     # -- reservations ------------------------------------------------------
+    @guarded
     def reserve(self, owner: str, ttl_seconds: float = 900.0) -> Reservation:
         if self._live_reservation() and self.reservation is not None:
             if self.reservation.owner != owner:
@@ -228,6 +272,7 @@ class ChassisSession:
         self._log(f"reserve owner={owner} ttl={ttl_seconds}")
         return self.reservation
 
+    @guarded
     def release(self, token: str) -> dict[str, Any]:
         """Releasing tears the fixture down. A dropped agent must not leave it live."""
         self._require(token)
@@ -255,6 +300,7 @@ class ChassisSession:
         return self.reservation is not None and not self.reservation.expired
 
     # -- mutate: always gated ----------------------------------------------
+    @guarded
     def arm(self, token: str, confirm: str) -> dict[str, Any]:
         """Arming is deliberately awkward.
 
@@ -273,12 +319,14 @@ class ChassisSession:
         self._log("arm")
         return {"armed": True}
 
+    @guarded
     def disarm(self, token: str) -> dict[str, Any]:
         self._require(token)
         self.armed = False
         self._log("disarm")
         return {"armed": False}
 
+    @guarded
     def route(self, token: str, source: str, target: str) -> dict[str, Any]:
         res = self._require(token)
         rid = route_id(source, target)
@@ -310,6 +358,7 @@ class ChassisSession:
         self._log(f"route {rid} via {[str(op) for op in path.operations]}")
         return {"route_id": rid, "status": "open", **route.as_dict()}
 
+    @guarded
     def unroute(self, token: str, source: str, target: str) -> dict[str, Any]:
         self._require(token)
         rid = route_id(source, target)
@@ -334,6 +383,7 @@ class ChassisSession:
             "retained_for_other_routes": retained,
         }
 
+    @guarded
     def clear_all_routes(self, token: str) -> dict[str, Any]:
         self._require(token)
         cleared = sorted(self.routes)
@@ -342,6 +392,7 @@ class ChassisSession:
         self._log(f"clear_all_routes {cleared}")
         return {"status": "cleared", "routes": cleared}
 
+    @guarded
     def set_crosspoint(
         self, token: str, card: str, subunit: int, row: int, column: int, state: bool
     ) -> dict[str, Any]:
