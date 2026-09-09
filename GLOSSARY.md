@@ -175,8 +175,9 @@ including from the state adoption refuses.
 
 ## 6  Deployment
 
-**Vendor MCP server** — one process, one fabric domain, one truth about the relays in it. A
-long-lived daemon clients connect *to*, never a subprocess a client spawns.
+**Vendor MCP server** — one process, one topology, one truth about the relays in it. A long-lived
+daemon clients connect *to*, never a subprocess a client spawns. It is also the broker's unit of
+resource: one server, one reservation, one thing to lease.
 
 **Gateway** — one authenticated endpoint per lab host, in front of the vendor servers that bind
 loopback. Namespaces the fleet, carries the audit log.

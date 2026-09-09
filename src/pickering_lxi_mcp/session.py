@@ -341,7 +341,42 @@ class ChassisSession:
         for alias in sorted(set(actual) - {c.alias for c in self.topology.cards}):
             problems.append(f"card {alias!r} is in the chassis but not in the topology")
 
+        problems.extend(self._vacuous_rules())
         return {"ok": not problems, "problems": problems}
+
+    def _vacuous_rules(self) -> list[str]:
+        """Safety rules that can never fire, which is almost always a wiring error.
+
+        A forbidden pair whose endpoints sit in different fabric domains is
+        unreachable by construction -- close every crosspoint on the chassis and
+        those two lines still never become common. So the rule looks like
+        protection and provides none.
+
+        The reason that matters more than it sounds: the usual cause is a patch
+        lead that exists in the rack and not in the topology file. The interlock
+        then reasons over a fixture less connected than the real one, which is
+        the failure mode with no runtime symptom -- everything passes, including
+        the route that shorts the supply through the lead nobody wrote down.
+        This check does not find missing leads in general. It finds the ones
+        that have silently disarmed a rule somebody thought they had.
+        """
+
+        home: dict[str, str] = {}
+        for domain in self.topology.fabric_domains():
+            for name in domain.endpoints:
+                home[name] = domain.domain_id
+
+        problems: list[str] = []
+        for a, b in self.policy.forbidden_pairs:
+            if home.get(a) != home.get(b):
+                problems.append(
+                    f"forbidden pair {a!r}/{b!r} can never fire: {a} is in fabric domain "
+                    f"{home.get(a)} and {b} is in {home.get(b)}, so no combination of "
+                    "closures can make them common. Either the pair names the wrong "
+                    "endpoints, or a patch lead between those domains is missing from "
+                    "this topology."
+                )
+        return problems
 
     # -- reservations ------------------------------------------------------
     @guarded

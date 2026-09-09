@@ -175,3 +175,99 @@ def test_domains_are_independent_of_what_is_currently_closed(armed):
     session.route(token, "psu_pos", "dut_pin_a1")
     session.route(token, "dmm_hi", "tc_1")
     assert session.topology.fabric_domains() == before
+
+
+# --------------------------------------------------------------------------
+# Safety is domain-local, which is what makes ownership granularity a policy
+# choice rather than a forced one -- and what makes a cross-domain safety rule
+# a bug rather than a precaution.
+# --------------------------------------------------------------------------
+
+
+def test_a_route_never_crosses_a_domain_boundary():
+    """By construction: two endpoints are routable only if they can become common."""
+    from pickering_lxi_mcp.errors import PathError
+
+    body = spec()
+    body["links"] = []
+    t = Topology(body)
+    home = {n: d.domain_id for d in t.fabric_domains() for n in d.endpoints}
+
+    assert home["dmm_hi"] != home["tc_1"]
+    with pytest.raises(PathError, match="no switch path"):
+        t.find_path("dmm_hi", "tc_1")
+
+    assert home["dmm_hi"] == home["dut_pin_a1"]
+    assert t.find_path("dmm_hi", "dut_pin_a1").operations
+
+
+def test_a_forbidden_pair_across_domains_can_never_fire():
+    """Close every crosspoint on the chassis; they still do not meet."""
+    from pickering_lxi_mcp.interlocks import InterlockPolicy, connectivity
+    from pickering_lxi_mcp.topology import Operation
+
+    body = spec()
+    body["links"] = []
+    t = Topology(body)
+    policy = InterlockPolicy.from_spec(body["interlocks"], t)
+
+    everything = [
+        Operation(card.alias, sub.subunit, row, column)
+        for card in t.cards
+        for sub in card.subunits
+        for row in range(1, sub.rows + 1)
+        for column in range(1, sub.columns + 1)
+    ]
+    components = connectivity(t, everything)
+
+    for a, b in policy.forbidden_pairs:
+        home_a = next(d.domain_id for d in t.fabric_domains() if a in d.endpoints)
+        home_b = next(d.domain_id for d in t.fabric_domains() if b in d.endpoints)
+        common = components.connected(t.endpoint(a).node, t.endpoint(b).node)
+        assert common == (home_a == home_b), (
+            "two endpoints can become common exactly when they share a domain"
+        )
+
+
+def make_session(topology):
+    from pickering_lxi_mcp.driver import SimBackend
+    from pickering_lxi_mcp.session import ChassisSession
+
+    return ChassisSession.build(backend=SimBackend(topology.cards), topology=topology)
+
+
+def test_the_shipped_topology_declares_no_vacuous_rules(session):
+    assert session.verify_topology() == {"ok": True, "problems": []}
+
+
+def test_a_rule_that_can_never_fire_is_reported():
+    """The realistic cause is a patch lead in the rack that is not in the file."""
+    body = spec()
+    body["endpoints"]["gnd"] = {
+        "card": "mux_b", "subunit": 2, "line": "column", "index": 8, "role": "ground",
+    }
+    body["links"] = [body["links"][0]]  # the lead that would tie them is gone
+
+    report = make_session(Topology(body)).verify_topology()
+    assert report["ok"] is False
+    problem = next(p for p in report["problems"] if "can never fire" in p)
+    assert "'psu_pos'/'gnd'" in problem
+    assert "matrix_a/sub1" in problem and "mux_b/sub2" in problem
+    assert "patch lead" in problem
+
+
+def test_a_rule_naming_endpoints_that_cannot_meet_is_reported():
+    body = spec()
+    body["links"] = []
+    body["interlocks"]["forbidden_pairs"] = [["psu_pos", "tc_1"]]
+    report = make_session(Topology(body)).verify_topology()
+    assert report["ok"] is False
+    assert any("can never fire" in p for p in report["problems"])
+
+
+def test_a_rule_inside_one_domain_is_not_reported():
+    body = spec()
+    body["links"] = []
+    body["interlocks"]["forbidden_pairs"] = [["psu_pos", "gnd"]]
+    report = make_session(Topology(body)).verify_topology()
+    assert [p for p in report["problems"] if "can never fire" in p] == []
