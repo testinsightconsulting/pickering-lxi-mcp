@@ -271,3 +271,84 @@ def test_a_rule_inside_one_domain_is_not_reported():
     body["interlocks"]["forbidden_pairs"] = [["psu_pos", "gnd"]]
     report = make_session(Topology(body)).verify_topology()
     assert [p for p in report["problems"] if "can never fire" in p] == []
+
+
+# --------------------------------------------------------------------------
+# A DUT that joins two of its own pins is not discoverable and IS declarable.
+# Declared, it is enforced like any other link; undeclared, verify_topology is
+# what notices, because the rule it disarms becomes unreachable.
+# --------------------------------------------------------------------------
+
+
+def two_halves(bridge: bool) -> Topology:
+    """Two matrices, no patch lead. The only thing that can join them is the DUT."""
+    body = {
+        "name": "two-halves",
+        "cards": {
+            "m1": {"bus": 1, "device": 1,
+                   "subunits": [{"subunit": 1, "type": "MATRIX", "rows": 3, "columns": 4}]},
+            "m2": {"bus": 1, "device": 2,
+                   "subunits": [{"subunit": 1, "type": "MATRIX", "rows": 3, "columns": 4}]},
+        },
+        "endpoints": {
+            "psu_pos": {"card": "m1", "subunit": 1, "line": "row", "index": 1},
+            "dut_in": {"card": "m1", "subunit": 1, "line": "column", "index": 1},
+            "gnd": {"card": "m2", "subunit": 1, "line": "row", "index": 1},
+            "dut_out": {"card": "m2", "subunit": 1, "line": "column", "index": 1},
+        },
+        "links": [],
+        "interlocks": {"require_arm": False, "forbidden_pairs": [["psu_pos", "gnd"]]},
+    }
+    if bridge:
+        body["links"] = [[
+            {"card": "m1", "subunit": 1, "line": "column", "index": 1},
+            {"card": "m2", "subunit": 1, "line": "column", "index": 1},
+        ]]
+    return Topology(body)
+
+
+def test_a_declared_dut_bridge_merges_the_domains_and_is_enforced():
+    topology = two_halves(bridge=True)
+    assert len(topology.fabric_domains()) == 1, "the bridge makes the two halves one fabric"
+
+    session = make_session(topology)
+    assert session.verify_topology()["ok"] is True
+
+    token = session.reserve(owner="pytest").token
+    session.route(token, "psu_pos", "dut_in")
+
+    from pickering_lxi_mcp.errors import InterlockError
+
+    with pytest.raises(InterlockError, match="electrically common"):
+        session.route(token, "gnd", "dut_out")
+
+
+def test_an_undeclared_dut_bridge_is_not_enforceable_and_verify_says_so():
+    """The hazard, and the only warning available: the rule it disarms is unreachable."""
+    topology = two_halves(bridge=False)
+    assert len(topology.fabric_domains()) == 2
+
+    session = make_session(topology)
+    report = session.verify_topology()
+    assert report["ok"] is False
+    assert any("can never fire" in p for p in report["problems"])
+
+    token = session.reserve(owner="pytest").token
+    session.route(token, "psu_pos", "dut_in")
+    # Nothing refuses this, because nothing in the file says the DUT joins the halves.
+    assert session.route(token, "gnd", "dut_out")["status"] == "open"
+
+
+def test_declaring_a_bridge_is_the_conservative_direction():
+    """A DUT whose internal path is conditional should still be declared.
+
+    Declaring over-connects the graph, so the interlock refuses more than it
+    strictly must. Over-refusing is the failure direction you want.
+    """
+    declared = make_session(two_halves(bridge=True))
+    token = declared.reserve(owner="pytest").token
+    declared.route(token, "psu_pos", "dut_in")
+
+    plan = declared.plan("gnd", "dut_out")
+    assert plan["permitted"] is False
+    assert "electrically common" in plan["refusal"]

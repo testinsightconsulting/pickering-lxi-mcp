@@ -8,6 +8,10 @@ Four of these terms are coined here — **fabric domain**, **unowned crosspoint*
 vocabulary or ordinary MCP vocabulary, and where this project's usage is narrower than the
 common one, that is called out.
 
+![Anatomy of a switch topology](docs/switch-topology-anatomy.png)
+
+*Every term below, on one bench. The numbers in the figure key to the panel beside it.*
+
 ---
 
 ## 1  The hardware, as the driver describes it
@@ -254,12 +258,34 @@ is no path through relays, and inventing one would be a lie about the fixture. T
 real; it lives in the test topology, which knows about the DUT. Segment ownership stays with each
 server, end-to-end ownership belongs to the contract.
 
-**The safety consequence is a real limit, not a gap in the implementation.** If the DUT connects
-its input to its output internally, domains A and B are electrically common *through the DUT*, and
-no switching server can know — connectivity through a bridge element is a property of the bridge,
-not of anybody's driver. A forbidden pair spanning that bridge cannot be enforced by any single
-server, and the interlock here does not claim to. Only the test topology is positioned to declare
-such a rule, and even then it is asserting something about the DUT that nothing verifies.
+### A DUT that bridges two domains
+
+If the DUT joins its input to its output internally, domains A and B really are electrically common
+through it. No driver can *discover* that — connectivity through a bridge element is a property of
+the bridge, not of anyone's instrument.
+
+But it is **declarable**, in exactly the shape of a patch lead: a link between the two lines those
+pins sit on. The file never describes the DUT's internals, only that these two ends come out
+common. Declared, the two halves become one fabric domain and the interlock enforces the bridge
+like any other link:
+
+```
+DUT bridge UNDECLARED   domains = 2   verify_topology: NOT ok — "can never fire"
+   psu_pos → dut_in     ok
+   gnd     → dut_out    ALLOWED       ← supply and ground now common through the DUT
+
+DUT bridge DECLARED     domains = 1   verify_topology: ok
+   psu_pos → dut_in     ok
+   gnd     → dut_out    InterlockError
+```
+
+So this is not an unenforceable hazard. It is the same class as a patch lead — a *documentation*
+hazard — and the same check catches it: undeclared, the `psu_pos`/`gnd` rule spans two domains,
+which is exactly the unreachable rule `verify_topology` reports.
+
+When the DUT's internal path is *conditional* — a mode, an internal relay, powered versus
+unpowered — declare it anyway. Declaring over-connects the graph, so the interlock refuses more
+than it strictly must, and over-refusing is the failure direction you want.
 
 ### The unit of ownership
 

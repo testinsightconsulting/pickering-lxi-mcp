@@ -176,6 +176,7 @@ listbox(14.98, 1.60, 5.60, 1.90, "Scaling to N racks", [
     "not a bigger gateway.",
 ], edge=LINE, fill=BG, ts=12.5, ss=8.9)
 
-plt.savefig("/tmp/claude-0/-home-claude/c6a8c407-134b-54cf-aa01-7277a4913801/scratchpad/deploy.png",
+plt.savefig(
+    "deployment-and-transports.png",
             dpi=160, facecolor=BG, bbox_inches="tight", pad_inches=0.36)
 print("ok")

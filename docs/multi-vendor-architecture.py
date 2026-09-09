@@ -109,7 +109,7 @@ ax.text(12.72, 5.72, "every mutate revalidates the lease", fontsize=8.8, color=G
         ha="left", va="center", style="italic")
 
 ax.text(6.35, 4.70,
-        "one process per physical resource        the device's truth lives here, not in the MCP session        observe ungated  /  mutate leased",
+        "one process per switch topology        the device's truth lives here, not in the MCP session        observe ungated  /  mutate leased",
         fontsize=10, color=MUTED, ha="center", style="italic")
 
 # ── divider ──────────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ rules = [
     ("Never per-session",
      "Relay positions, output on/off, who holds the\nbench. One physical thing, one truth. The MCP\nsession id may be per-connection; the state\nbehind it may not be."),
     ("Concurrency",
-     "One process per resource. Two agents are one\ntruth plus a lease — never two device objects.\nYou cannot scale this horizontally: a second\nchassis is a second process, not a replica."),
+     "One process per switch topology, which must\ncontain whole fabric domains. Two agents are one\ntruth plus a lease — never two device objects,\nand never a replica."),
     ("Multi-user",
      "Everyone may observe, one may mutate — that\nis what makes sharing tolerable. A lease is\ntime-boxed and expiry tears down to a safe\nstate, so a crashed agent cannot hold a fixture."),
 ]
@@ -159,6 +159,7 @@ for i, (h, body) in enumerate(rules):
     ax.text(x, -0.70, h, fontsize=11.5, fontweight="bold", color=INK)
     ax.text(x, -1.05, body, fontsize=9.4, color=MUTED, va="top", linespacing=1.65)
 
-plt.savefig("/tmp/claude-0/-home-claude/c6a8c407-134b-54cf-aa01-7277a4913801/scratchpad/arch.png",
+plt.savefig(
+    "multi-vendor-architecture.png",
             dpi=160, facecolor=BG, bbox_inches="tight", pad_inches=0.36)
 print("ok")
