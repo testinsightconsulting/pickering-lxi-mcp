@@ -1,0 +1,34 @@
+{
+  "name": "interlocks: the short is refused as a graph, not as a request, and the fixture is left untouched",
+  "steps": [
+    { "id": "res",    "tool": "reserve_chassis", "args": { "owner": "walkthrough" }, "expect": { "owner": "walkthrough" } },
+
+    { "id": "unarmed","tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a1" }, "expect_error": "InterlockError" },
+    { "id": "clean1", "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 0 } },
+
+    { "id": "badarm", "tool": "arm_interlock", "args": { "token": "{{res.token}}", "confirm": "yes" }, "expect_error": "InterlockError" },
+    { "id": "stillup","tool": "interlock_status", "expect": { "armed": false } },
+    { "id": "arm",    "tool": "arm_interlock", "args": { "token": "{{res.token}}", "confirm": "the fixture is safe to energise" }, "expect": { "armed": true } },
+
+    { "id": "psu",    "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "psu_pos", "to_endpoint": "dut_pin_a1" }, "expect": { "status": "open" } },
+    { "id": "measure","tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "dmm_hi", "to_endpoint": "dut_pin_a1" }, "expect": { "status": "open" } },
+
+    { "id": "short",  "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "gnd", "to_endpoint": "dut_pin_a1" }, "expect_error": "InterlockError" },
+    { "id": "intact", "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 2 } },
+    { "id": "explain","tool": "plan_route", "args": { "from_endpoint": "gnd", "to_endpoint": "dut_pin_a1" }, "expect": { "permitted": false, "hops": 1 } },
+
+    { "id": "elsewhere","tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "gnd", "to_endpoint": "dut_pin_a5" }, "expect": { "status": "open" } },
+
+    { "id": "excl",   "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "psu_pos", "to_endpoint": "dut_pin_a2" }, "expect_error": "InterlockError" },
+
+    { "id": "tc1",    "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "scope_ch2", "to_endpoint": "tc_1" }, "expect": { "status": "open" } },
+    { "id": "tc2",    "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "scope_ch2", "to_endpoint": "tc_2" }, "expect_error": "InterlockError" },
+
+    { "id": "oob",    "tool": "set_crosspoint", "args": { "token": "{{res.token}}", "card": "matrix_a", "subunit": 1, "row": 99, "column": 1, "state": true }, "expect_error": "ValueError" },
+    { "id": "held",   "tool": "set_crosspoint", "args": { "token": "{{res.token}}", "card": "matrix_a", "subunit": 1, "row": 1, "column": 1, "state": false }, "expect_error": "InterlockError" },
+    { "id": "direct", "tool": "set_crosspoint", "args": { "token": "{{res.token}}", "card": "matrix_a", "subunit": 1, "row": 4, "column": 9, "state": true }, "expect": { "closed": true } },
+
+    { "id": "free",   "tool": "release_chassis", "args": { "token": "{{res.token}}" }, "expect": { "status": "released" } },
+    { "id": "empty",  "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 0 } }
+  ]
+}

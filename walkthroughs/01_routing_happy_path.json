@@ -1,0 +1,34 @@
+{
+  "name": "routing: plan, reserve, arm, route through a patched mux, observe, tear down",
+  "steps": [
+    { "id": "id",      "tool": "chassis_identify", "expect": { "backend": "simulator", "topology": "dut-bench", "open_routes": 0, "interlock_armed": false } },
+    { "id": "verify",  "tool": "verify_topology", "expect": { "ok": true, "problems": [] } },
+    { "id": "plan",    "tool": "plan_route", "args": { "from_endpoint": "dmm_hi", "to_endpoint": "tc_1" },
+                       "expect": { "hops": 2, "permitted": false, "already_open": false } },
+
+    { "id": "res",     "tool": "reserve_chassis", "args": { "owner": "walkthrough" }, "expect": { "owner": "walkthrough" } },
+    { "id": "arm",     "tool": "arm_interlock", "args": { "token": "{{res.token}}", "confirm": "the fixture is safe to energise" }, "expect": { "armed": true } },
+    { "id": "plan2",   "tool": "plan_route", "args": { "from_endpoint": "dmm_hi", "to_endpoint": "tc_1" }, "expect": { "permitted": true, "refusal": null } },
+
+    { "id": "r1",      "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a1" },
+                       "expect": { "status": "open", "route_id": "dut_pin_a1<->scope_ch1",
+                                   "operations": [ { "card": "matrix_a", "subunit": 1, "row": 4, "column": 1 } ] } },
+    { "id": "r2",      "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "dmm_hi", "to_endpoint": "tc_1" },
+                       "expect": { "status": "open",
+                                   "operations": [ { "card": "matrix_a", "subunit": 1, "row": 6, "column": 13 },
+                                                   { "card": "mux_b", "subunit": 1, "row": 1, "column": 1 } ] } },
+    { "id": "again",   "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "dmm_hi", "to_endpoint": "tc_1" }, "expect": { "status": "already_open" } },
+
+    { "id": "state",   "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "type": "MATRIX", "rows": 8, "columns": 16, "closed_count": 2 } },
+    { "id": "xp",      "tool": "crosspoint_state", "args": { "card": "matrix_a", "subunit": 1, "row": 4, "column": 1 }, "expect": { "closed": true, "held_by_routes": ["dut_pin_a1<->scope_ch1"] } },
+    { "id": "routes",  "tool": "list_routes", "expect": { "routes": [ { "from": "scope_ch1", "to": "dut_pin_a1", "owner": "walkthrough" }, { "from": "dmm_hi", "to": "tc_1" } ] } },
+
+    { "id": "u1",      "tool": "unroute_signal", "args": { "token": "{{res.token}}", "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a1" },
+                       "expect": { "status": "closed", "opened": [ { "card": "matrix_a", "subunit": 1, "row": 4, "column": 1 } ] } },
+    { "id": "u1again", "tool": "unroute_signal", "args": { "token": "{{res.token}}", "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a1" }, "expect": { "status": "not_open" } },
+
+    { "id": "free",    "tool": "release_chassis", "args": { "token": "{{res.token}}" }, "expect": { "status": "released", "interlock_armed": false } },
+    { "id": "empty",   "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 0 } },
+    { "id": "disarmed","tool": "interlock_status", "expect": { "armed": false, "closed_crosspoints": 0, "open_routes": [] } }
+  ]
+}

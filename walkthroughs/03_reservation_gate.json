@@ -1,0 +1,25 @@
+{
+  "name": "reservations: mutation needs a live token, observation never does",
+  "steps": [
+    { "id": "notoken", "tool": "route_signal",     "args": { "token": "", "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a1" }, "expect_error": "PermissionError" },
+    { "id": "bogus",   "tool": "route_signal",     "args": { "token": "not-a-real-token", "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a1" }, "expect_error": "ReservationError" },
+    { "id": "noarm",   "tool": "arm_interlock",    "args": { "token": "not-a-real-token", "confirm": "the fixture is safe to energise" }, "expect_error": "ReservationError" },
+    { "id": "noclear", "tool": "clear_all_routes", "args": { "token": "" }, "expect_error": "PermissionError" },
+
+    { "id": "obs1",    "tool": "list_endpoints",   "expect": { "topology": "dut-bench" } },
+    { "id": "obs2",    "tool": "list_cards",       "expect": "<any>" },
+    { "id": "obs3",    "tool": "interlock_status", "expect": { "armed": false, "closed_crosspoints": 0 } },
+    { "id": "obs4",    "tool": "plan_route",       "args": { "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a1" }, "expect": { "hops": 1 } },
+
+    { "id": "res",     "tool": "reserve_chassis",  "args": { "owner": "alice" }, "expect": { "owner": "alice" } },
+    { "id": "steal",   "tool": "reserve_chassis",  "args": { "owner": "mallory" }, "expect_error": "ReservationError" },
+    { "id": "obs5",    "tool": "subunit_state",    "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 0 } },
+
+    { "id": "unknown1","tool": "plan_route",       "args": { "from_endpoint": "scope_ch1", "to_endpoint": "nowhere" }, "expect_error": "TopologyError" },
+    { "id": "bussed",  "tool": "plan_route",       "args": { "from_endpoint": "scope_ch1", "to_endpoint": "scope_ch2" },
+                       "expect": { "hops": 2, "operations": [ { "row": 4, "column": 1 }, { "row": 5, "column": 1 } ] } },
+
+    { "id": "free",    "tool": "release_chassis",  "args": { "token": "{{res.token}}" }, "expect": { "status": "released" } },
+    { "id": "reuse",   "tool": "route_signal",     "args": { "token": "{{res.token}}", "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a1" }, "expect_error": "ReservationError" }
+  ]
+}

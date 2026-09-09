@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pickering-lxi-mcp"
+version = "0.1.0"
+description = "An MCP server that routes signals through Pickering PXI/LXI switching, with logical endpoints, connectivity interlocks and a built-in simulator"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Test In Sight Consulting" }]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "pickering",
+    "pxi",
+    "lxi",
+    "switching",
+    "matrix",
+    "test-and-measurement",
+    "instrument-control",
+    "agentic-ai",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Manufacturing",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Hardware :: Hardware Drivers",
+]
+dependencies = ["mcp>=1.2"]
+
+[project.optional-dependencies]
+hardware = ["pilxi>=5.7"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://github.com/testinsightconsulting/pickering-lxi-mcp"
+Source = "https://github.com/testinsightconsulting/pickering-lxi-mcp"
+Issues = "https://github.com/testinsightconsulting/pickering-lxi-mcp/issues"
+
+[project.scripts]
+pickering-lxi-mcp = "pickering_lxi_mcp.server:main"
+pickering-lxi-mcp-walkthrough = "pickering_lxi_mcp.walkthrough:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pickering_lxi_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/walkthroughs",
+    "/README.md",
+    "/PATTERNS.md",
+    "/LICENSE",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E501"]
