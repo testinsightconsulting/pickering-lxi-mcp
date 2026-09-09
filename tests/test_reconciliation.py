@@ -39,7 +39,7 @@ def stale(session: ChassisSession) -> ChassisSession:
 
 def test_a_clean_chassis_reconciles_itself(session):
     assert session.reconciled is True
-    assert session.orphans == set()
+    assert session.unowned == set()
     assert session.reconciliation_status()["resolve_with"] == []
 
 
@@ -154,16 +154,16 @@ def test_clearing_everything_also_drops_what_was_adopted(stale):
 
     result = stale.clear_all_routes(token)
     assert result["unowned_crosspoints_opened"] == 2
-    assert stale.orphans == set()
+    assert stale.unowned == set()
     assert stale.subunit_state("matrix_a", 1)["closed_count"] == 0
 
 
-def test_reconcile_does_not_orphan_this_process_own_routes(armed):
+def test_reconcile_does_not_disown_this_process_own_routes(armed):
     """Re-reading the chassis must not turn our own closures into strangers."""
     session, token = armed
     session.route(token, "scope_ch1", "dut_pin_a1")
     session.reconcile()
-    assert session.orphans == set()
+    assert session.unowned == set()
     assert session.reconciled is True
     assert session.route(token, "dmm_hi", "dut_pin_a3")["status"] == "open"
 
@@ -174,13 +174,13 @@ def test_reconcile_is_idempotent(stale):
     assert stale.reconciliation_status() == first
 
 
-def test_orphans_across_more_than_one_card_are_all_found(session):
+def test_unowned_crosspoints_across_more_than_one_card_are_all_found(session):
     session.backend.close_crosspoint("matrix_a", 1, 2, 5)
     session.backend.close_crosspoint("mux_b", 1, 1, 3)
     session.reconcile()
     cards = {c["card"] for c in session.reconciliation_status()["unowned_crosspoints"]}
     assert cards == {"matrix_a", "mux_b"}
-    assert session.orphans == {Operation("matrix_a", 1, 2, 5), Operation("mux_b", 1, 1, 3)}
+    assert session.unowned == {Operation("matrix_a", 1, 2, 5), Operation("mux_b", 1, 1, 3)}
 
 
 def test_adoption_when_there_is_nothing_to_adopt_is_not_an_error(session):

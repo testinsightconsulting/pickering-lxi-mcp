@@ -101,7 +101,11 @@ class ChassisSession:
     # not a blank sheet at startup: a previous process may have died holding a
     # fixture live, or another program may be using the rack. Until somebody
     # says what these are, this server refuses to switch -- see reconcile().
-    orphans: set[Operation] = field(default_factory=set)
+    # "Unowned" is the word throughout: on the wire, in the code, in the
+    # refusal text. A crosspoint is owned when some route in THIS process holds
+    # it, and unowned otherwise -- which says nothing about whether it is
+    # legitimate, only that nothing here can say what depends on it.
+    unowned: set[Operation] = field(default_factory=set)
     reconciled: bool = False
 
     # One agent is routinely several threads: the MCP SDK runs synchronous tool
@@ -163,9 +167,9 @@ class ChassisSession:
                         if closed:
                             found.add(Operation(card.alias, sub.subunit, r, c))
 
-        self.orphans = found - owned
-        self.reconciled = not self.orphans
-        self._log(f"reconcile found={len(found)} orphans={len(self.orphans)}")
+        self.unowned = found - owned
+        self.reconciled = not self.unowned
+        self._log(f"reconcile found={len(found)} unowned={len(self.unowned)}")
         return self.reconciliation_status()
 
     def reconciliation_status(self) -> dict[str, Any]:
@@ -176,7 +180,7 @@ class ChassisSession:
         return {
             "reconciled": self.reconciled,
             "unowned_crosspoints": sorted(
-                (op.as_dict() for op in self.orphans),
+                (op.as_dict() for op in self.unowned),
                 key=lambda d: (d["card"], d["subunit"], d["row"], d["column"]),
             ),
             "violations": problems,
@@ -364,10 +368,10 @@ class ChassisSession:
         """Refuse to energise a fixture whose current state nobody has claimed."""
         if self.reconciled:
             return
-        listing = ", ".join(str(op) for op in sorted(self.orphans, key=str)[:6])
-        more = "" if len(self.orphans) <= 6 else f" (+{len(self.orphans) - 6} more)"
+        listing = ", ".join(str(op) for op in sorted(self.unowned, key=str)[:6])
+        more = "" if len(self.unowned) <= 6 else f" (+{len(self.unowned) - 6} more)"
         raise ReconciliationError(
-            f"{len(self.orphans)} crosspoint(s) were already closed on this chassis when "
+            f"{len(self.unowned)} crosspoint(s) were already closed on this chassis when "
             f"this server started, and no route here owns them: {listing}{more}. "
             "The fixture may be live. Call adopt_existing_state to keep that state and "
             "count it in every future interlock check, or clear_existing_state to open "
@@ -404,7 +408,7 @@ class ChassisSession:
                 f"adopt_existing_state requires confirm={expected!r} exactly; nothing changed"
             )
 
-        problems = interlocks.describe_violations(self.topology, self.policy, self.orphans)
+        problems = interlocks.describe_violations(self.topology, self.policy, self.unowned)
         if problems:
             raise ReconciliationError(
                 "the state on this chassis breaks the topology's own rules, so it cannot be "
@@ -413,7 +417,7 @@ class ChassisSession:
             )
 
         self.reconciled = True
-        self._log(f"adopt orphans={len(self.orphans)}")
+        self._log(f"adopt unowned={len(self.unowned)}")
         return {"status": "adopted", **self.reconciliation_status()}
 
     @guarded
@@ -427,10 +431,10 @@ class ChassisSession:
                 f"clear_existing_state requires confirm={expected!r} exactly; nothing changed"
             )
 
-        opened = len(self.orphans)
+        opened = len(self.unowned)
         self.backend.clear_all()
         self.routes.clear()
-        self.orphans.clear()
+        self.unowned.clear()
         self.reconciled = True
         self._log(f"clear_existing_state opened={opened}")
         return {"status": "cleared", "crosspoints_opened": opened, **self.reconciliation_status()}
@@ -524,12 +528,12 @@ class ChassisSession:
     def clear_all_routes(self, token: str) -> dict[str, Any]:
         self._require(token)
         cleared = sorted(self.routes)
-        adopted = len(self.orphans)
+        adopted = len(self.unowned)
         self.routes.clear()
-        self.orphans.clear()
+        self.unowned.clear()
         self.backend.clear_all()
         self.reconciled = True
-        self._log(f"clear_all_routes {cleared} orphans={adopted}")
+        self._log(f"clear_all_routes {cleared} unowned={adopted}")
         return {
             "status": "cleared",
             "routes": cleared,
@@ -559,7 +563,7 @@ class ChassisSession:
             )
 
         op = Operation(card, subunit, row, column)
-        if not state and op in self.orphans:
+        if not state and op in self.unowned:
             raise InterlockError(
                 f"crosspoint {op} was already closed when this server started and was adopted, "
                 "so this process does not know what depends on it; use clear_all_routes to open "
@@ -611,7 +615,7 @@ class ChassisSession:
         one has no business tearing down.
         """
 
-        return {op for route in self.routes.values() for op in route.operations} | self.orphans
+        return {op for route in self.routes.values() for op in route.operations} | self.unowned
 
     def _endpoints_in_use(self) -> dict[str, str]:
         in_use: dict[str, str] = {}

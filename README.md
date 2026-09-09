@@ -96,6 +96,9 @@ Three consequences worth naming:
 
 **A topology is a claim about the rack.** `verify_topology` checks it against what the chassis actually reports — which is trivially true on the simulator, and is exactly what catches a topology written for last quarter's rack.
 
+Terms used precisely here — *fabric domain*, *unowned crosspoint*, *endpoint*, *reservation* as
+distinct from *lease* — are defined with worked examples in **[GLOSSARY.md](GLOSSARY.md)**.
+
 ## The two patterns
 
 Both are argued at length in **[PATTERNS.md](PATTERNS.md)**.

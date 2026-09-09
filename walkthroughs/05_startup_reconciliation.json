@@ -31,7 +31,7 @@
     { "id": "counted", "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 3 } },
 
     { "id": "keep",    "tool": "unroute_signal", "args": { "token": "{{res.token}}", "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a2" }, "expect": { "status": "closed" } },
-    { "id": "orphans", "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 2 } },
+    { "id": "unowned", "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 2 } },
 
     { "id": "wipe",    "tool": "clear_all_routes", "args": { "token": "{{res.token}}" }, "expect": { "status": "cleared", "unowned_crosspoints_opened": 2 } },
     { "id": "empty",   "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 0 } }
