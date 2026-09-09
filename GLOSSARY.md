@@ -84,9 +84,10 @@ partition different things:
 
 | Domain | Elements | "common" means | A forbidden pair looks like |
 |---|---|---|---|
-| **Fabric** (signal) | lines | electrically continuous | supply shorted to ground |
+| **Signal** (fabric) | lines | electrically continuous | supply shorted to ground |
 | **Data** | ports, VLANs, subnets | reachable | two segments bridged that must not be |
 | **Management** | interfaces | reachable | management reachable from the network under test |
+| **OOBM** | consoles, outlets | reachable, powered | an outlet cut on a fixture someone else holds |
 
 Only the first is computed here; a network domain is *configured* elsewhere and named in the test
 topology. The interlock question is the same shape in all three — *is any forbidden pair in the same
@@ -244,13 +245,28 @@ loopback. Namespaces the fleet, carries the audit log.
 **Broker** — one fleet-wide service issuing leases across racks, over the set of resources a test
 topology names. Not built.
 
-**Plane** — signal, data, management. See the figure: the same devices, three different meanings of
-"connected", one reservation across all of them. *In-band management is the cross-plane hazard*: if
-the control path rides the data plane, a test that disrupts the network under test cuts the path you
-are testing it with, and the abort cannot be delivered. Out-of-band keeps the control path outside
-the experiment, which is a topology decision rather than a networking preference.
+**Plane** — signal, data, management, out-of-band management. Four different meanings of
+"connected" over the same devices, and one reservation across all of them.
 
-![Three planes, one topology](docs/three-planes.png)
+They are not peers. The signal plane is *underneath* the data plane — a VLAN exists because a link
+exists because a crosspoint is closed — and OOBM is underneath nothing at all, which is the whole
+point of it.
+
+**Which plane a control path rides is decided by its role, and one of them is forbidden:**
+
+| | |
+|---|---|
+| in-band management | routine control — configure, measure, read back. Needs the device alive. |
+| OOBM | recovery and abort — console, BMC, power. Needs nothing else working. |
+| **data plane** | **never.** A test that disrupts the network under test would be cutting its own control path. |
+
+That last row is a rule, not a preference. And it is what makes an atomic contract implementable:
+the abort path is OOBM *by construction*, because a contract held whole or not at all must tear
+down even when the management plane is exactly what the test broke. Which in turn makes an outlet a
+dangerous resource in its own right — cutting one held by a contract you do not own is this plane's
+version of the short, and no single server can see the pair.
+
+![Four planes, one topology](docs/four-planes.png)
 
 **Control plane / signal plane** — the control plane is a star: agents talk to servers. The
 signal plane is a fabric: instruments reach the DUT through the matrix. Same boxes, different
