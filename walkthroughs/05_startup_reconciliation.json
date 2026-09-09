@@ -1,0 +1,39 @@
+{
+  "name": "recovery: a chassis found already switched is not a chassis this server will switch",
+  "given": [
+    { "card": "matrix_a", "subunit": 1, "row": 1, "column": 1 },
+    { "card": "matrix_a", "subunit": 1, "row": 6, "column": 1 }
+  ],
+  "steps": [
+    { "id": "id",      "tool": "chassis_identify", "expect": { "reconciled": false } },
+    { "id": "found",   "tool": "reconciliation_status",
+                       "expect": { "reconciled": false, "violations": [],
+                                   "resolve_with": ["adopt_existing_state", "clear_existing_state"],
+                                   "unowned_crosspoints": [ { "card": "matrix_a", "subunit": 1, "row": 1, "column": 1 },
+                                                            { "card": "matrix_a", "subunit": 1, "row": 6, "column": 1 } ] } },
+    { "id": "seen",    "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 2 } },
+
+    { "id": "res",     "tool": "reserve_chassis", "args": { "owner": "walkthrough" }, "expect": { "owner": "walkthrough" } },
+    { "id": "noarm",   "tool": "arm_interlock", "args": { "token": "{{res.token}}", "confirm": "the fixture is safe to energise" }, "expect_error": "ReconciliationError" },
+    { "id": "noroute", "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a2" }, "expect_error": "ReconciliationError" },
+    { "id": "nodirect","tool": "set_crosspoint", "args": { "token": "{{res.token}}", "card": "matrix_a", "subunit": 1, "row": 4, "column": 2, "state": true }, "expect_error": "ReconciliationError" },
+    { "id": "untouched","tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 2 } },
+
+    { "id": "badword", "tool": "adopt_existing_state", "args": { "token": "{{res.token}}", "confirm": "yes" }, "expect_error": "ReconciliationError" },
+    { "id": "stillno", "tool": "chassis_identify", "expect": { "reconciled": false } },
+
+    { "id": "adopt",   "tool": "adopt_existing_state", "args": { "token": "{{res.token}}", "confirm": "adopt the state on the chassis" }, "expect": { "status": "adopted", "reconciled": true } },
+    { "id": "nochange","tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 2 } },
+
+    { "id": "arm",     "tool": "arm_interlock", "args": { "token": "{{res.token}}", "confirm": "the fixture is safe to energise" }, "expect": { "armed": true } },
+    { "id": "short",   "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "gnd", "to_endpoint": "dut_pin_a1" }, "expect_error": "InterlockError" },
+    { "id": "normal",  "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a2" }, "expect": { "status": "open" } },
+    { "id": "counted", "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 3 } },
+
+    { "id": "keep",    "tool": "unroute_signal", "args": { "token": "{{res.token}}", "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a2" }, "expect": { "status": "closed" } },
+    { "id": "orphans", "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 2 } },
+
+    { "id": "wipe",    "tool": "clear_all_routes", "args": { "token": "{{res.token}}" }, "expect": { "status": "cleared", "unowned_crosspoints_opened": 2 } },
+    { "id": "empty",   "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 0 } }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "recovery: a fixture already shorted cannot be adopted as a baseline",
+  "given": [
+    { "card": "matrix_a", "subunit": 1, "row": 1, "column": 1 },
+    { "card": "matrix_a", "subunit": 1, "row": 3, "column": 1 }
+  ],
+  "steps": [
+    { "id": "found",  "tool": "reconciliation_status",
+                      "expect": { "reconciled": false, "violations": ["'psu_pos' and 'gnd' are already electrically common"] } },
+    { "id": "res",    "tool": "reserve_chassis", "args": { "owner": "walkthrough" }, "expect": { "owner": "walkthrough" } },
+    { "id": "noadopt","tool": "adopt_existing_state", "args": { "token": "{{res.token}}", "confirm": "adopt the state on the chassis" }, "expect_error": "ReconciliationError" },
+    { "id": "intact", "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 2 } },
+    { "id": "stillno","tool": "chassis_identify", "expect": { "reconciled": false } },
+
+    { "id": "badword","tool": "clear_existing_state", "args": { "token": "{{res.token}}", "confirm": "ok" }, "expect_error": "ReconciliationError" },
+    { "id": "clear",  "tool": "clear_existing_state", "args": { "token": "{{res.token}}", "confirm": "open every crosspoint on the chassis" },
+                      "expect": { "status": "cleared", "crosspoints_opened": 2, "reconciled": true } },
+    { "id": "empty",  "tool": "subunit_state", "args": { "card": "matrix_a", "subunit": 1 }, "expect": { "closed_count": 0 } },
+
+    { "id": "arm",    "tool": "arm_interlock", "args": { "token": "{{res.token}}", "confirm": "the fixture is safe to energise" }, "expect": { "armed": true } },
+    { "id": "route",  "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "psu_pos", "to_endpoint": "dut_pin_a1" }, "expect": { "status": "open" } },
+    { "id": "free",   "tool": "release_chassis", "args": { "token": "{{res.token}}" }, "expect": { "status": "released" } }
+  ]
+}

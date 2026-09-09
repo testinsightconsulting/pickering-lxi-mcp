@@ -49,9 +49,12 @@ Work in this order.
 2. reserve_chassis to take the chassis, then arm_interlock with
    confirm="the fixture is safe to energise". Both are required before any
    relay moves.
-3. route_signal / unroute_signal by endpoint name. A route is applied whole or
+3. If the server reports it is not reconciled, the chassis was already switched
+   when it started and nothing will move until you resolve that: read
+   reconciliation_status, then adopt_existing_state or clear_existing_state.
+4. route_signal / unroute_signal by endpoint name. A route is applied whole or
    not at all, and unroute keeps crosspoints that other routes still need.
-4. release_chassis when you are done. It clears every route and disarms, so a
+5. release_chassis when you are done. It clears every route and disarms, so a
    run that ends unexpectedly does not leave the fixture live.
 
 Observation -- list_cards, list_routes, subunit_state, crosspoint_state,
@@ -140,6 +143,12 @@ def plan_route(from_endpoint: str, to_endpoint: str) -> dict[str, Any]:
 
 
 @server.tool()
+def reconciliation_status() -> dict[str, Any]:
+    """What was already closed on the chassis when this server started, and what it breaks."""
+    return _call("reconciliation_status")
+
+
+@server.tool()
 def interlock_status() -> dict[str, Any]:
     """Whether the interlock is armed, and the safety policy in force."""
     return _call("interlock_status")
@@ -164,6 +173,21 @@ def list_tool_tiers() -> list[dict[str, str]]:
 
 
 # -- MUTATE tier -----------------------------------------------------------
+
+
+@server.tool()
+def adopt_existing_state(token: str, confirm: str) -> dict[str, Any]:
+    """Keep the crosspoints found closed at startup. `confirm` must be 'adopt the state on the chassis'.
+
+    Switches nothing. Moves them into the set every later interlock check reasons over.
+    """
+    return _call("adopt_existing_state", token=token, confirm=confirm)
+
+
+@server.tool()
+def clear_existing_state(token: str, confirm: str) -> dict[str, Any]:
+    """Open everything found closed at startup. `confirm` must be 'open every crosspoint on the chassis'."""
+    return _call("clear_existing_state", token=token, confirm=confirm)
 
 
 @server.tool()

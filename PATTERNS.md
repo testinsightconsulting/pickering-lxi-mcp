@@ -46,6 +46,31 @@ Four properties follow, and they are the whole argument for the pattern.
 
 **The check runs before the first relay moves.** The plan is computed, the union is taken, the answer is known — and only then does anything close. This is why `route_signal` can be atomic, and why `plan_route` can answer "would this be allowed" without taking the chassis.
 
+### The corollary nobody expects: an empty model is worse than no model
+
+The check above is only as good as its idea of what is closed. Which raises the
+question of where that idea comes from when the process has just started.
+
+A chassis is not a blank sheet at boot. A previous run may have died holding a
+fixture live; another program may be using the rack. If the server starts with
+an empty route table and starts answering questions, every interlock decision is
+computed against a fiction — and the fiction is optimistic, so the first thing it
+will do is authorise a short. Note the shape of that: *no* safety check would
+have been safer than this one, because a server with no interlock at least does
+not tell you a route is fine.
+
+So the server reads every subunit before it believes anything, and if it finds
+crosspoints no route owns it refuses to switch until a caller resolves it —
+adopt the state, which switches nothing but folds those crosspoints into every
+later check, or clear it and start from a chassis whose state is known.
+Observation stays open throughout, because deciding requires looking.
+
+Two details that are easy to get wrong. Adoption is refused when the found state
+already breaks the policy: making a violation the baseline is worse than
+refusing to serve, and clearing is the way out. And an adopted crosspoint belongs
+to no route, so no `unroute` will open it — nothing in this process knows what
+depends on it. Only clearing everything, deliberately, removes it.
+
 ### What it costs
 
 The topology file is now load-bearing safety infrastructure. A forbidden pair that nobody declared is not checked, and a patch lead that nobody wrote down makes the connectivity model wrong in the direction that matters. `verify_topology` closes half of that gap by checking the card claims against the chassis; nothing closes the other half, because no driver can tell you what someone plugged into the front panel. The honest statement is that this pattern converts a class of runtime hazard into a class of documentation hazard, and documentation hazards are the ones a review can catch.

@@ -8,7 +8,7 @@ It ships with an in-process chassis simulator, so `git clone && pip install -e "
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                    # 83 tests
+pytest -q                                    # 126 tests
 pickering-lxi-mcp-walkthrough walkthroughs   # the CI gate
 pickering-lxi-mcp                            # MCP server on stdio, simulated chassis
 ```
@@ -54,6 +54,23 @@ So this server does not ask "is this route forbidden". It asks: given every cros
 > route_signal  gnd     -> dut_pin_a5        ok   matrix_a/sub1(3,5)     same route, different pin
 ```
 
+## Waking up to a chassis someone else left switched
+
+A chassis is not a blank sheet when a process starts. A previous run may have died holding a fixture live; another program may be using the rack. The route table comes back empty and the relays do not — and an empty model of a chassis that is not empty is worse than no model, because the interlock reasons from it confidently and will authorise the very short it exists to prevent.
+
+So the server reads every subunit before it believes anything. If it finds crosspoints no route here owns, it refuses to switch until someone says what they are:
+
+```
+> route_signal  scope_ch1 -> dut_pin_a2
+    ReconciliationError: 2 crosspoint(s) were already closed on this chassis when this
+    server started, and no route here owns them: matrix_a/sub1(1,1), matrix_a/sub1(6,1).
+    The fixture may be live. Call adopt_existing_state to keep that state and count it in
+    every future interlock check, or clear_existing_state to open everything and start
+    from a known-safe chassis. Observation works meanwhile.
+```
+
+Observation is never gated here either — you cannot decide what to do about a fixture you are not allowed to look at. `adopt_existing_state` switches nothing; it moves those crosspoints into the set every later check reasons over, so a route that would compose a short *with state this process never created* is refused exactly as if it had. And a fixture that is already shorted cannot be adopted at all, because making a violation the baseline is the one outcome worse than refusing to serve — for that, clearing is the way out.
+
 ## Logical endpoints, not crosspoints
 
 A test engineer does not think in crosspoints; they think *connect the DMM to thermocouple 1*. The topology file is the map from those names to physical lines, plus the patch leads between cards. Routing is then a shortest-path search over that graph, and the answer is an ordered list of switch operations.
@@ -96,6 +113,14 @@ def test_no_raw_driver_passthrough_is_exposed():
 **2. Deterministic tool walkthroughs are the hard CI gate.** A walkthrough is an ordered list of tool calls and expected results, expressed as data, run against the simulator. `expect_error` is the half that matters most: a switching server's job is as much refusing as connecting.
 
 ```
+PASS  recovery: a chassis found already switched is not a chassis this server will switch
+  ok  found      2 crosspoints, owned by nobody   -> reconciled: false
+  ok  noarm      arm_interlock                    -> ReconciliationError
+  ok  untouched  still exactly 2 closed
+  ok  adopt      adopt_existing_state             -> adopted, nothing switched
+  ok  short      gnd -> dut_pin_a1                -> InterlockError  (against adopted state)
+  ok  normal     scope_ch1 -> dut_pin_a2          -> open
+
 PASS  interlocks: the short is refused as a graph, not as a request, and the fixture is left untouched
   ok  unarmed    route before arming             -> InterlockError
   ok  clean1     nothing closed after refusal    -> 0 crosspoints
@@ -121,9 +146,12 @@ PASS  interlocks: the short is refused as a graph, not as a request, and the fix
 | `subunit_state` | observe | Every closed crosspoint on one subunit |
 | `crosspoint_state` | observe | One crosspoint, and which routes are holding it |
 | `interlock_status` | observe | Armed or not, and the policy in force |
+| `reconciliation_status` | observe | What was found already closed at startup, and what it breaks |
 | `verify_topology` | observe | The topology's claims vs what the chassis reports |
 | `reserve_chassis` | observe | Take a time-boxed reservation; returns the token |
 | `list_tool_tiers` | observe | Let an agent plan before it reserves |
+| `adopt_existing_state` | **mutate** | Keep crosspoints found at startup; count them in every later check |
+| `clear_existing_state` | **mutate** | Open what was found and begin from a known chassis |
 | `arm_interlock` | **mutate** | Explicit acknowledgement before any relay moves |
 | `disarm_interlock` | **mutate** | Stop new routing; leave existing routes up |
 | `route_signal` | **mutate** | Connect two endpoints by the shortest switch path |
@@ -132,7 +160,7 @@ PASS  interlocks: the short is refused as a graph, not as a request, and the fix
 | `set_crosspoint` | **mutate** | Direct control, still bounds- and interlock-checked |
 | `release_chassis` | **mutate** | Clear routes, disarm, release the reservation |
 
-Chassis lifecycle: `connect → discover → reserve → arm → route → observe → unroute → release`. Releasing tears the fixture down, because an agent that crashes mid-run must not leave a bench live.
+Chassis lifecycle: `connect → reconcile → discover → reserve → arm → route → observe → unroute → release`. Releasing tears the fixture down, because an agent that crashes mid-run must not leave a bench live.
 
 Arming takes a literal acknowledgement — `confirm="the fixture is safe to energise"` — rather than a boolean, because a boolean is something a model fills in from context and a fixed string is something it has to mean.
 

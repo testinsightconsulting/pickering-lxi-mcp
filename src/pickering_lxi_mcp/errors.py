@@ -28,5 +28,14 @@ class InterlockError(PickeringError):
     """A safety interlock refused the operation. Nothing was switched."""
 
 
+class ReconciliationError(PickeringError):
+    """The chassis was found already switched by something other than this process.
+
+    Raised until a caller says what the pre-existing state is: adopt it, or
+    clear it. Every mutation that could energise the fixture is refused in the
+    meantime; observation is not.
+    """
+
+
 class ReservationError(PickeringError):
     """A mutating action was attempted without a valid, current reservation."""

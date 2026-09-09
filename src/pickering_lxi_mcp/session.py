@@ -26,7 +26,7 @@ from typing import Any
 
 from . import interlocks
 from .driver import Backend
-from .errors import DriverError, InterlockError, ReservationError
+from .errors import DriverError, InterlockError, ReconciliationError, ReservationError
 from .interlocks import InterlockPolicy
 from .topology import Operation, SwitchPath, Topology
 
@@ -97,6 +97,13 @@ class ChassisSession:
     routes: dict[str, Route] = field(default_factory=dict)
     journal: list[str] = field(default_factory=list)
 
+    # Crosspoints found closed that no route in this process owns. A chassis is
+    # not a blank sheet at startup: a previous process may have died holding a
+    # fixture live, or another program may be using the rack. Until somebody
+    # says what these are, this server refuses to switch -- see reconcile().
+    orphans: set[Operation] = field(default_factory=set)
+    reconciled: bool = False
+
     # One agent is routinely several threads: the MCP SDK runs synchronous tool
     # bodies in a worker pool, so two tool calls on one connection -- let alone
     # two connections under one lease -- genuinely execute in parallel.
@@ -119,11 +126,66 @@ class ChassisSession:
 
     @classmethod
     def build(cls, backend: Backend, topology: Topology) -> ChassisSession:
-        return cls(
+        session = cls(
             backend=backend,
             topology=topology,
             policy=InterlockPolicy.from_spec(topology.interlocks, topology),
         )
+        session.reconcile()
+        return session
+
+    # -- startup reconciliation -------------------------------------------
+    @guarded
+    def reconcile(self) -> dict[str, Any]:
+        """Read what is actually closed before believing anything.
+
+        The failure this exists for: the process restarts, the route table comes
+        back empty, and the relays do not. The server then believes nothing is
+        closed while the fixture is live -- and the interlock, which reasons
+        from that table, will happily authorise the very short it exists to
+        prevent. An empty in-memory model of a chassis that is not empty is
+        worse than no model at all, because it is confidently wrong.
+
+        So: read every subunit, record anything closed that no route here owns,
+        and if there is any, refuse to switch until a person decides between
+        adopting the state and clearing it. Observation stays open throughout,
+        because deciding requires looking first.
+        """
+
+        owned = {op for route in self.routes.values() for op in route.operations}
+        found: set[Operation] = set()
+
+        for card in self.backend.cards():
+            for sub in card.subunits:
+                grid = self.backend.view_subunit(card.alias, sub.subunit)
+                for r, line in enumerate(grid, start=1):
+                    for c, closed in enumerate(line, start=1):
+                        if closed:
+                            found.add(Operation(card.alias, sub.subunit, r, c))
+
+        self.orphans = found - owned
+        self.reconciled = not self.orphans
+        self._log(f"reconcile found={len(found)} orphans={len(self.orphans)}")
+        return self.reconciliation_status()
+
+    def reconciliation_status(self) -> dict[str, Any]:
+        """What was found at startup, and what it breaks. Never gated."""
+        problems = interlocks.describe_violations(
+            self.topology, self.policy, self._closed_operations()
+        )
+        return {
+            "reconciled": self.reconciled,
+            "unowned_crosspoints": sorted(
+                (op.as_dict() for op in self.orphans),
+                key=lambda d: (d["card"], d["subunit"], d["row"], d["column"]),
+            ),
+            "violations": problems,
+            "resolve_with": (
+                []
+                if self.reconciled
+                else ["adopt_existing_state", "clear_existing_state"]
+            ),
+        }
 
     # -- observe: never gated ---------------------------------------------
     def describe(self) -> dict[str, Any]:
@@ -135,6 +197,7 @@ class ChassisSession:
                 "topology_source": self.topology.source,
                 "endpoint_count": len(self.topology.endpoints),
                 "interlock_armed": self.armed,
+                "reconciled": self.reconciled,
                 "reserved_by": self.reservation.owner if self._live_reservation() else None,
                 "open_routes": len(self.routes),
             }
@@ -217,6 +280,7 @@ class ChassisSession:
         return {
             "armed": self.armed,
             "policy": self.policy.as_dict(),
+            "reconciliation": self.reconciliation_status(),
             "closed_crosspoints": len(self._closed_operations()),
             "open_routes": sorted(self.routes),
         }
@@ -296,10 +360,81 @@ class ChassisSession:
             raise ReservationError("reservation token does not match the active reservation")
         return res
 
+    def _require_reconciled(self) -> None:
+        """Refuse to energise a fixture whose current state nobody has claimed."""
+        if self.reconciled:
+            return
+        listing = ", ".join(str(op) for op in sorted(self.orphans, key=str)[:6])
+        more = "" if len(self.orphans) <= 6 else f" (+{len(self.orphans) - 6} more)"
+        raise ReconciliationError(
+            f"{len(self.orphans)} crosspoint(s) were already closed on this chassis when "
+            f"this server started, and no route here owns them: {listing}{more}. "
+            "The fixture may be live. Call adopt_existing_state to keep that state and "
+            "count it in every future interlock check, or clear_existing_state to open "
+            "everything and start from a known-safe chassis. Observation works meanwhile."
+        )
+
     def _live_reservation(self) -> bool:
         return self.reservation is not None and not self.reservation.expired
 
     # -- mutate: always gated ----------------------------------------------
+    @guarded
+    def adopt_existing_state(self, token: str, confirm: str) -> dict[str, Any]:
+        """Keep what was found, and hold every future check to it.
+
+        Adoption does not switch anything. It moves the found crosspoints into
+        the set the interlock reasons over, so a route that would compose a
+        short with them is refused exactly as if this process had closed them.
+        They belong to no route, so no unroute will open them; clearing is what
+        removes them.
+
+        Refused if the found state is one this policy would never have
+        permitted. Adopting a fixture that is already shorted would make the
+        violation the baseline every later check is measured against, which is
+        the one outcome worse than refusing to serve.
+        """
+
+        self._require(token)
+        if self.reconciled:
+            return {"status": "nothing_to_adopt", **self.reconciliation_status()}
+
+        expected = "adopt the state on the chassis"
+        if confirm.strip().lower() != expected:
+            raise ReconciliationError(
+                f"adopt_existing_state requires confirm={expected!r} exactly; nothing changed"
+            )
+
+        problems = interlocks.describe_violations(self.topology, self.policy, self.orphans)
+        if problems:
+            raise ReconciliationError(
+                "the state on this chassis breaks the topology's own rules, so it cannot be "
+                f"adopted as a baseline: {'; '.join(problems)}. Use clear_existing_state, or "
+                "fix the topology if these connections are legitimate."
+            )
+
+        self.reconciled = True
+        self._log(f"adopt orphans={len(self.orphans)}")
+        return {"status": "adopted", **self.reconciliation_status()}
+
+    @guarded
+    def clear_existing_state(self, token: str, confirm: str) -> dict[str, Any]:
+        """Open every crosspoint and start from a chassis whose state is known."""
+
+        self._require(token)
+        expected = "open every crosspoint on the chassis"
+        if confirm.strip().lower() != expected:
+            raise ReconciliationError(
+                f"clear_existing_state requires confirm={expected!r} exactly; nothing changed"
+            )
+
+        opened = len(self.orphans)
+        self.backend.clear_all()
+        self.routes.clear()
+        self.orphans.clear()
+        self.reconciled = True
+        self._log(f"clear_existing_state opened={opened}")
+        return {"status": "cleared", "crosspoints_opened": opened, **self.reconciliation_status()}
+
     @guarded
     def arm(self, token: str, confirm: str) -> dict[str, Any]:
         """Arming is deliberately awkward.
@@ -310,6 +445,7 @@ class ChassisSession:
         """
 
         self._require(token)
+        self._require_reconciled()
         expected = "the fixture is safe to energise"
         if confirm.strip().lower() != expected:
             raise InterlockError(
@@ -329,6 +465,7 @@ class ChassisSession:
     @guarded
     def route(self, token: str, source: str, target: str) -> dict[str, Any]:
         res = self._require(token)
+        self._require_reconciled()
         rid = route_id(source, target)
         if rid in self.routes:
             return {"route_id": rid, "status": "already_open", **self.routes[rid].as_dict()}
@@ -387,10 +524,17 @@ class ChassisSession:
     def clear_all_routes(self, token: str) -> dict[str, Any]:
         self._require(token)
         cleared = sorted(self.routes)
+        adopted = len(self.orphans)
         self.routes.clear()
+        self.orphans.clear()
         self.backend.clear_all()
-        self._log(f"clear_all_routes {cleared}")
-        return {"status": "cleared", "routes": cleared}
+        self.reconciled = True
+        self._log(f"clear_all_routes {cleared} orphans={adopted}")
+        return {
+            "status": "cleared",
+            "routes": cleared,
+            "unowned_crosspoints_opened": adopted,
+        }
 
     @guarded
     def set_crosspoint(
@@ -405,6 +549,7 @@ class ChassisSession:
         """
 
         self._require(token)
+        self._require_reconciled()
         info = self.topology.subunit(card, subunit)
         if not (1 <= row <= info.rows):
             raise ValueError(f"row {row} outside 1..{info.rows} on {card} subunit {subunit}")
@@ -414,6 +559,12 @@ class ChassisSession:
             )
 
         op = Operation(card, subunit, row, column)
+        if not state and op in self.orphans:
+            raise InterlockError(
+                f"crosspoint {op} was already closed when this server started and was adopted, "
+                "so this process does not know what depends on it; use clear_all_routes to open "
+                "everything deliberately"
+            )
         if not state and self._is_held(op):
             holders = sorted(
                 r.route_id for r in self.routes.values() if op in r.operations
@@ -460,7 +611,7 @@ class ChassisSession:
         one has no business tearing down.
         """
 
-        return {op for route in self.routes.values() for op in route.operations}
+        return {op for route in self.routes.values() for op in route.operations} | self.orphans
 
     def _endpoints_in_use(self) -> dict[str, str]:
         in_use: dict[str, str] = {}

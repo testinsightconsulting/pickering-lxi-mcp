@@ -90,6 +90,11 @@ def plan_route(session: ChassisSession, from_endpoint: str, to_endpoint: str) ->
     return session.plan(from_endpoint, to_endpoint)
 
 
+@tool("reconciliation_status", Tier.OBSERVE, "What was found already closed at startup, and what it breaks.")
+def reconciliation_status(session: ChassisSession) -> dict[str, Any]:
+    return session.reconciliation_status()
+
+
 @tool("interlock_status", Tier.OBSERVE, "Whether the interlock is armed, and the policy in force.")
 def interlock_status(session: ChassisSession) -> dict[str, Any]:
     return session.interlock_status()
@@ -112,6 +117,16 @@ def reserve_chassis(
 # MUTATE tier - moves relays. Requires a reservation token, and everything
 # except arming also requires the interlock to be armed.
 # --------------------------------------------------------------------------
+
+
+@tool("adopt_existing_state", Tier.MUTATE, "Keep crosspoints found closed at startup and count them in every later check.")
+def adopt_existing_state(session: ChassisSession, token: str, confirm: str) -> dict[str, Any]:
+    return session.adopt_existing_state(token, confirm)
+
+
+@tool("clear_existing_state", Tier.MUTATE, "Open every crosspoint found closed at startup and begin from a known chassis.")
+def clear_existing_state(session: ChassisSession, token: str, confirm: str) -> dict[str, Any]:
+    return session.clear_existing_state(token, confirm)
 
 
 @tool("arm_interlock", Tier.MUTATE, "Arm the chassis interlock with an explicit acknowledgement.")

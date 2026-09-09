@@ -106,6 +106,47 @@ def connectivity(
     return components
 
 
+def describe_violations(
+    topology: Topology, policy: InterlockPolicy, operations: Iterable[Operation]
+) -> list[str]:
+    """Every rule a given set of closed crosspoints breaks, without raising.
+
+    ``check_route`` answers "may I do this next", which is a question about a
+    proposed change and stops at the first refusal. This answers "is the fixture
+    I am looking at one this policy would ever have allowed", which is a
+    question about a state someone else produced -- a chassis found already
+    switched at startup, most of all. It reports everything rather than the
+    first thing, because whoever has to decide what to do about it wants the
+    whole list.
+    """
+
+    operations = tuple(operations)
+    problems: list[str] = []
+
+    counts: dict[tuple[str, int], int] = {}
+    for op in operations:
+        counts[(op.card, op.subunit)] = counts.get((op.card, op.subunit), 0) + 1
+    for (card, subunit), count in sorted(counts.items()):
+        ceiling = policy.max_closures_per_subunit
+        try:
+            hardware_ceiling = topology.subunit(card, subunit).closure_limit
+        except Exception:
+            problems.append(f"{card} subunit {subunit} is not described by this topology")
+            continue
+        limit = hardware_ceiling if ceiling is None else min(ceiling, hardware_ceiling)
+        if count > limit:
+            problems.append(
+                f"{card} subunit {subunit} has {count} crosspoints closed, over the limit of {limit}"
+            )
+
+    components = connectivity(topology, operations)
+    for a, b in policy.forbidden_pairs:
+        if components.connected(topology.endpoint(a).node, topology.endpoint(b).node):
+            problems.append(f"{a!r} and {b!r} are already electrically common")
+
+    return problems
+
+
 def check_route(
     topology: Topology,
     policy: InterlockPolicy,

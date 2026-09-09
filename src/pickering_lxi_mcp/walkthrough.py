@@ -8,6 +8,12 @@ useful for tone and coverage, but they are advisory. This is the gate.
 ``expect_error`` is the half that matters most here. A switching server's job is
 as much refusing as connecting, and a walkthrough that can only assert on happy
 paths cannot prove an interlock fires.
+
+A spec may also carry ``given``: crosspoints closed directly on the simulated
+chassis before the run, behind the server's back. That is arranging the world,
+not a step -- it is how a walkthrough can start from a rack somebody else left
+switched, which is the state the recovery path exists for and the one you cannot
+reach through the tool surface by definition.
 """
 
 from __future__ import annotations
@@ -89,8 +95,24 @@ def _matches(expected: Any, actual: Any) -> bool:
     return expected == actual
 
 
+def arrange(session: ChassisSession, given: list[dict[str, Any]]) -> None:
+    """Close crosspoints on the chassis without going through the server.
+
+    Deliberately reaching past the tool layer: this is the world the server
+    wakes up to, not something a caller did to it.
+    """
+
+    for cp in given:
+        session.backend.close_crosspoint(
+            cp["card"], int(cp["subunit"]), int(cp["row"]), int(cp["column"])
+        )
+    session.reconcile()
+
+
 def run(spec: dict[str, Any], session: ChassisSession | None = None) -> WalkthroughResult:
     session = session or build_session(env={})
+    if spec.get("given"):
+        arrange(session, spec["given"])
     result = WalkthroughResult(name=spec.get("name", "walkthrough"))
     produced: dict[str, Any] = {}
 
