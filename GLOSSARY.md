@@ -79,6 +79,25 @@ every other line in it.
 > both multiplexers together. Remove the leads and it becomes three. The number is computed from
 > the topology, never declared: `list_fabric_domains`, or `Topology.fabric_domains()`.
 
+**A fabric domain is one kind of domain, not the only one.** A lab has at least three, and they
+partition different things:
+
+| Domain | Elements | "common" means | A forbidden pair looks like |
+|---|---|---|---|
+| **Fabric** (signal) | lines | electrically continuous | supply shorted to ground |
+| **Data** | ports, VLANs, subnets | reachable | two segments bridged that must not be |
+| **Management** | interfaces | reachable | management reachable from the network under test |
+
+Only the first is computed here; a network domain is *configured* elsewhere and named in the test
+topology. The interlock question is the same shape in all three — *is any forbidden pair in the same
+connected component, given what exists plus what is proposed* — which is worth knowing before
+someone reimplements it per plane.
+
+**And a device is not in a domain — its connections are.** Domains partition lines and segments,
+never boxes. A DUT with pins wired to two racks sits in two fabric domains; the same DUT is also in
+two data segments and one management domain, simultaneously. So is a scope with channels in two
+racks. "Which domain is this device in" has no answer; "which domains does it touch" always does.
+
 ### What a fabric domain does not respect
 
 The chassis → card → subunit hierarchy. The domain partition cuts across it in *both*
@@ -176,7 +195,12 @@ fixed global order so two agents cannot deadlock half-held.
 > would imply a coordination guarantee nothing provides. When the broker exists, a reservation
 > becomes the thing a server grants *because* a valid lease was presented.
 
-**Owner** — who holds the reservation. Today a self-declared string: a courtesy label, not an
+**Principal** — who a reservation is held by: one engineer, or a group. A group is not a weaker
+form of ownership. It admits several writers at once, and inside the reservation the *lock* is what
+orders them — the same mechanism that already makes one agent's several threads safe. Admission is
+the reservation's job, ordering is the lock's, and neither substitutes for the other.
+
+**Owner** — the principal holding the reservation. Today a self-declared string: a courtesy label, not an
 authenticated identity. It becomes real when the gateway authenticates and the broker signs.
 
 **Token** — proves the caller went through `reserve_chassis`. Not an authentication mechanism.
@@ -219,6 +243,14 @@ loopback. Namespaces the fleet, carries the audit log.
 
 **Broker** — one fleet-wide service issuing leases across racks, over the set of resources a test
 topology names. Not built.
+
+**Plane** — signal, data, management. See the figure: the same devices, three different meanings of
+"connected", one reservation across all of them. *In-band management is the cross-plane hazard*: if
+the control path rides the data plane, a test that disrupts the network under test cuts the path you
+are testing it with, and the abort cannot be delivered. Out-of-band keeps the control path outside
+the experiment, which is a topology decision rather than a networking preference.
+
+![Three planes, one topology](docs/three-planes.png)
 
 **Control plane / signal plane** — the control plane is a star: agents talk to servers. The
 signal plane is a fabric: instruments reach the DUT through the matrix. Same boxes, different
