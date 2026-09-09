@@ -3,8 +3,8 @@
 Words this project uses in a specific way, with the bench in
 `src/pickering_lxi_mcp/topologies/dut_bench.json` as the worked example throughout.
 
-Three of these terms are coined here — **fabric domain**, **unowned crosspoint**, and the
-**reservation / lease** split. They are marked. Everything else is either the vendor's
+Four of these terms are coined here — **fabric domain**, **unowned crosspoint**, the
+**reservation / lease** split, and the **switch topology / test topology** split. They are marked. Everything else is either the vendor's
 vocabulary or ordinary MCP vocabulary, and where this project's usage is narrower than the
 common one, that is called out.
 
@@ -175,14 +175,15 @@ including from the state adoption refuses.
 
 ## 6  Deployment
 
-**Vendor MCP server** — one process, one topology, one truth about the relays in it. A long-lived
+**Vendor MCP server** — one process, one switch topology, one truth about the relays in it. A long-lived
 daemon clients connect *to*, never a subprocess a client spawns. It is also the broker's unit of
 resource: one server, one reservation, one thing to lease.
 
 **Gateway** — one authenticated endpoint per lab host, in front of the vendor servers that bind
 loopback. Namespaces the fleet, carries the audit log.
 
-**Broker** — one fleet-wide service issuing leases across racks. Not built.
+**Broker** — one fleet-wide service issuing leases across racks, over the set of resources a test
+topology names. Not built.
 
 **Control plane / signal plane** — the control plane is a star: agents talk to servers. The
 signal plane is a fabric: instruments reach the DUT through the matrix. Same boxes, different
@@ -191,22 +192,120 @@ several rather than the layer the others are reached through.
 
 ---
 
-## 7  What "one process per fabric domain" does *not* mean
+## 7  Two things called "topology"
 
-It is a statement about **devices**, not about **users**.
+This word was doing double duty, and the two objects it named are not the same size.
 
-The rule is that one fabric domain has exactly one process speaking to it, because one set of
-relays can only have one truth about its state. How many people or agents use that process is
-unrelated and unbounded — they multiplex through it, and what separates them is the reservation,
-the lock and (eventually) the lease, not process isolation.
+**Switch topology** — what this server loads: one file describing one switching fabric. Cards,
+subunits, endpoints, patch leads, interlock policy. One per process. `Topology` in the code is
+always this one.
 
-Giving each engineer their own process would reintroduce the exact bug the rule exists to prevent:
-N processes, N route tables, N interlocks each reasoning from its own partial picture, and a
-short that every one of them would have refused individually.
+**Test topology** — the lab-level contract: everything a workflow needs, across every vendor.
+Switching, scope, traffic generator, emulator, the DUT. It names resources on several servers and
+declares the connections between them. Nothing in this repository implements it, and it needs
+nothing from this repository to exist — it sits entirely above the server.
+
+> When these pages say "topology" unqualified they mean the switch topology, because that is what
+> the code loads. Talking to a lab, "topology" almost always means the test topology. Say which.
+
+Two things called **endpoint**, too. Here an endpoint is a named line on a switch (`psu_pos`). In
+deployment writing it usually means a URL. This document says **address** for the second, and
+"endpoint" only ever means the first.
+
+---
+
+## 8  Containment, and what owns what
+
+**domain ⊆ switch topology = process ∈ test topology.** Each link earns its place differently.
+
+**A domain never spans two switch topologies.** Forced, by the interlock: a safety question about
+any line in a domain can only be answered by reading every other line in it, so splitting one
+across two processes leaves both reasoning from a partial picture. If a patch lead ties two chassis
+together, those chassis are one switch topology in one process — there is no configuration in which
+they are two servers.
+
+**A switch topology may contain many domains.** A free choice, made when the file is authored.
+Nothing stops you describing four unrelated benches in one file; nothing requires you to.
+
+**One process serves one switch topology.** One route table, one interlock, one lock, one
+reservation, one address.
+
+**A test topology contains many processes.** It is the contract, and it is atomic: held whole by
+one user under one reservation, or not held at all. A resource in it that cannot be acquired, or
+that is lost mid-run, does not degrade the contract — it voids the reservation and the workflow
+aborts. Which is why a lease is renewable rather than merely time-boxed: the renewal is how a
+broken contract gets noticed before the workflow acts on a fixture it no longer owns.
+
+> An earlier phrasing — "one process per fabric domain" — was too strong, and survives in `docs/`
+> and in the commit history. The domain is the *minimum* a process must contain, not the maximum.
+
+### Connections that cross a domain, and why the server is right to refuse them
+
+A **switch path** never crosses a fabric domain boundary — that is what a domain means. A
+**connection in a test topology** crosses them routinely, because it is a composition, and not
+everything it composes is a relay.
+
+```
+awg_out ──[ domain A ]──▶ DUT in  ···  DUT  ···  DUT out ──[ domain B ]──▶ scope_ch1
+```
+
+Asked to route `awg_out` to `scope_ch1`, the switching server correctly raises `PathError`: there
+is no path through relays, and inventing one would be a lie about the fixture. The connection is
+real; it lives in the test topology, which knows about the DUT. Segment ownership stays with each
+server, end-to-end ownership belongs to the contract.
+
+**The safety consequence is a real limit, not a gap in the implementation.** If the DUT connects
+its input to its output internally, domains A and B are electrically common *through the DUT*, and
+no switching server can know — connectivity through a bridge element is a property of the bridge,
+not of anybody's driver. A forbidden pair spanning that bridge cannot be enforced by any single
+server, and the interlock here does not claim to. Only the test topology is positioned to declare
+such a rule, and even then it is asserting something about the DUT that nothing verifies.
+
+### The unit of ownership
+
+A reservation on this server covers its whole switch topology, and therefore every domain in it.
+One owner at a time; anyone else waits, or is scheduled.
+
+Domain-level ownership would also be *safe* — routes never cross a domain boundary, and a forbidden
+pair whose endpoints sit in different domains cannot fire even with every crosspoint on the chassis
+closed, so an interlock is domain-local by construction. Safety does not force the coarser choice.
+Three other things do:
+
+* a switch topology is authored for a purpose — the patch leads *are* the experiment;
+* two users on one fixture share more than switching: the DUT, the ground reference, the bench;
+* it keeps each server's resource flat — one switch topology, one server, one address, one resource
+  id, no hierarchical addressing and no partial acquisition *inside* a server. Naming several such
+  resources together is the test topology's job. The flatness is per-server, not fleet-wide.
+
+Which moves the decision to authoring time, where it belongs: **write switch topologies at the
+granularity you intend to share.** Four independent benches used independently should be four files
+and four servers, not one file leased whole. `list_fabric_domains` is how you check — a switch
+topology reporting several disjoint domains is telling you it *could* be split, and asking whether
+it should be.
+
+### And none of this is about users
+
+How many people or agents use a process is unrelated and unbounded. They multiplex through it, and
+what separates them is the reservation, the lock and the lease — never process isolation. Giving
+each engineer their own process would reintroduce the bug the rule exists to prevent: N route
+tables, N interlocks each reasoning from its own partial picture, and a short every one of them
+would have refused individually.
 
 | | Determined by | Count |
 |---|---|---|
-| Processes | the wiring — one per fabric domain | fixed by the rack |
+| Domains | the wiring | computed, never declared |
+| Processes | the switch topology files you authored | one per switch topology |
+| Test topologies | the workflows you run | one per contract, spanning many processes |
 | Users / agents | who is working | unbounded, orthogonal |
 
-The two axes only meet at the reservation: many users, one at a time, per fabric domain.
+The axes meet at one place: many users, one at a time, per test topology — and therefore per switch
+topology inside it.
+
+### Vacuous rules
+
+Because an interlock is domain-local, a forbidden pair naming two endpoints in different domains is
+unreachable: it looks like protection and provides none. `verify_topology` reports it, and the
+usual cause is worth knowing — a patch lead that exists in the rack and not in the file. The
+interlock then reasons over a fixture less connected than the real one, which is the failure with
+no runtime symptom. This does not find missing leads in general; it finds the ones that have
+silently disarmed a rule somebody thought they had.
