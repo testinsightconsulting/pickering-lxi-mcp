@@ -40,16 +40,29 @@ _LINES = (ROW, COLUMN)
 
 @dataclass(frozen=True)
 class Endpoint:
-    """A name a human uses, bound to one physical line."""
+    """A name a human uses, bound to one physical line.
+
+    The two optional ratings exist because connectivity is not the only hazard.
+    On a DC fixture the dangerous state is a short: two things common that must
+    not be. On an RF fixture it is also *magnitude* -- a source that can put out
+    more than a destination can survive, with a perfectly legitimate path
+    between them. That is a different predicate over the same graph, and a
+    connectivity-only interlock does not see it at all.
+
+    Both are in dBm and both are asserted, never measured: they come from a
+    datasheet by way of whoever wrote the file.
+    """
 
     name: str
     node: Node
     role: str = "signal"
     description: str = ""
+    max_output_dbm: float | None = None
+    max_input_dbm: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         alias, subunit, line, index = self.node
-        return {
+        body: dict[str, Any] = {
             "name": self.name,
             "role": self.role,
             "description": self.description,
@@ -58,6 +71,11 @@ class Endpoint:
             "line": line,
             "index": index,
         }
+        if self.max_output_dbm is not None:
+            body["max_output_dbm"] = self.max_output_dbm
+        if self.max_input_dbm is not None:
+            body["max_input_dbm"] = self.max_input_dbm
+        return body
 
 
 @dataclass(frozen=True)
@@ -450,11 +468,15 @@ def _parse_endpoints(spec: dict[str, Any], cards: dict[str, CardInfo]) -> dict[s
         if not isinstance(body, dict):
             raise TopologyError(f"endpoint {name!r} must be an object")
         node = _parse_node(body, cards, f"endpoint {name!r}")
+        out = body.get("max_output_dbm")
+        inp = body.get("max_input_dbm")
         endpoints[str(name)] = Endpoint(
             name=str(name),
             node=node,
             role=str(body.get("role", "signal")),
             description=str(body.get("description", "")),
+            max_output_dbm=None if out is None else float(out),
+            max_input_dbm=None if inp is None else float(inp),
         )
     return endpoints
 

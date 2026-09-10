@@ -72,7 +72,8 @@
       "line": "row",
       "index": 4,
       "role": "instrument",
-      "description": "Oscilloscope channel 1"
+      "description": "Oscilloscope channel 1, +10 dBm damage limit",
+      "max_input_dbm": 10.0
     },
     "scope_ch2": {
       "card": "matrix_a",
@@ -80,7 +81,8 @@
       "line": "row",
       "index": 5,
       "role": "instrument",
-      "description": "Oscilloscope channel 2"
+      "description": "Oscilloscope channel 2, +10 dBm damage limit",
+      "max_input_dbm": 10.0
     },
     "dmm_hi": {
       "card": "matrix_a",
@@ -104,7 +106,8 @@
       "line": "row",
       "index": 8,
       "role": "source",
-      "description": "Function generator output"
+      "description": "Function generator output, up to +20 dBm",
+      "max_output_dbm": 20.0
     },
     "dut_pin_a1": {
       "card": "matrix_a",
@@ -301,6 +304,7 @@
     ],
     "exclusive_endpoints": [
       "psu_pos"
-    ]
+    ],
+    "enforce_power_limits": true
   }
 }

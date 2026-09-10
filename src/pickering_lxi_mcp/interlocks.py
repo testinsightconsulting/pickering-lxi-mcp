@@ -36,6 +36,7 @@ class InterlockPolicy:
     max_closures_per_subunit: int | None = None
     forbidden_pairs: tuple[tuple[str, str], ...] = ()
     exclusive_endpoints: frozenset[str] = frozenset()
+    enforce_power_limits: bool = True
 
     @classmethod
     def from_spec(cls, spec: dict[str, Any], topology: Topology) -> InterlockPolicy:
@@ -58,6 +59,7 @@ class InterlockPolicy:
             max_closures_per_subunit=None if limit is None else int(limit),
             forbidden_pairs=tuple(pairs),
             exclusive_endpoints=exclusive,
+            enforce_power_limits=bool(spec.get("enforce_power_limits", True)),
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -66,6 +68,7 @@ class InterlockPolicy:
             "max_closures_per_subunit": self.max_closures_per_subunit,
             "forbidden_pairs": [list(p) for p in self.forbidden_pairs],
             "exclusive_endpoints": sorted(self.exclusive_endpoints),
+            "enforce_power_limits": self.enforce_power_limits,
         }
 
 
@@ -106,6 +109,52 @@ def connectivity(
     return components
 
 
+def overloads(
+    topology: Topology, policy: InterlockPolicy, operations: Iterable[Operation]
+) -> list[str]:
+    """Source/destination pairs where a legitimate path carries too much power.
+
+    Connectivity asks *whether* two things are common. This asks *what arrives*
+    when they are. A DC fixture's dangerous state is a short; an RF fixture's is
+    also an overload -- a +20 dBm generator reaching a +10 dBm receiver front
+    end through a path nobody declared forbidden, because there is nothing wrong
+    with the path. Same graph, different question.
+
+    Deliberately not modelled: insertion loss, pad values and coupling. Treating
+    the path as lossless is the conservative direction (it over-reports rather
+    than under-reports), and any figure that depended on loss would be asserted
+    from a datasheet rather than measured, which is a worse kind of number to
+    hang a damage limit on. Frequency is not modelled at all -- isolation is a
+    curve, not a boolean, and this graph has no notion of one.
+    """
+
+    if not policy.enforce_power_limits:
+        return []
+
+    sources = [e for e in topology.endpoints.values() if e.max_output_dbm is not None]
+    sinks = [e for e in topology.endpoints.values() if e.max_input_dbm is not None]
+    if not sources or not sinks:
+        return []
+
+    components = connectivity(topology, operations)
+    problems: list[str] = []
+    for source in sources:
+        for sink in sinks:
+            if source.name == sink.name:
+                continue
+            if source.max_output_dbm is None or sink.max_input_dbm is None:
+                continue
+            margin = source.max_output_dbm - sink.max_input_dbm
+            if margin <= 0:
+                continue
+            if components.connected(source.node, sink.node):
+                problems.append(
+                    f"{source.name!r} can deliver up to {source.max_output_dbm:+.1f} dBm into "
+                    f"{sink.name!r}, rated {sink.max_input_dbm:+.1f} dBm — {margin:.1f} dB over"
+                )
+    return sorted(problems)
+
+
 def describe_violations(
     topology: Topology, policy: InterlockPolicy, operations: Iterable[Operation]
 ) -> list[str]:
@@ -144,6 +193,7 @@ def describe_violations(
         if components.connected(topology.endpoint(a).node, topology.endpoint(b).node):
             problems.append(f"{a!r} and {b!r} are already electrically common")
 
+    problems.extend(overloads(topology, policy, operations))
     return problems
 
 
@@ -207,6 +257,15 @@ def check_route(
                 f"which the topology forbids. Nothing was switched. "
                 f"(Requested {source!r} to {target!r}.)"
             )
+
+    already = set(overloads(topology, policy, closed))
+    for problem in overloads(topology, policy, prospective):
+        if problem in already:
+            continue
+        raise InterlockError(
+            f"refused on power: {problem}. The path is not forbidden — the level on it is. "
+            f"Nothing was switched. (Requested {source!r} to {target!r}.)"
+        )
 
 
 def check_crosspoint(

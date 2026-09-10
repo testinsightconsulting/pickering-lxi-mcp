@@ -388,6 +388,17 @@ class ChassisSession:
             "the instrument or pin the name says. The driver reports lines, never what is on "
             "the other end of them."
         )
+        rated = [
+            e for e in self.topology.endpoints.values()
+            if e.max_output_dbm is not None or e.max_input_dbm is not None
+        ]
+        if rated:
+            notes.append(
+                f"{len(rated)} power rating(s) — read off a datasheet by whoever wrote this "
+                "file. Paths are treated as lossless, which over-reports rather than under-"
+                "reports, and frequency is not modelled at all: isolation is a curve, and this "
+                "graph has no notion of one."
+            )
         return notes
 
     def _vacuous_rules(self) -> list[str]:

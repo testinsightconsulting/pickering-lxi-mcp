@@ -84,7 +84,7 @@ partition different things:
 
 | Domain | Elements | "common" means | A forbidden pair looks like |
 |---|---|---|---|
-| **Signal** (fabric) | lines | electrically continuous | supply shorted to ground |
+| **Signal** (fabric) | lines | electrically continuous | supply shorted to ground, or a level above what the far end survives |
 | **Data** | ports, VLANs, subnets | reachable | two segments bridged that must not be |
 | **Management** | interfaces | reachable | management reachable from the network under test |
 | **OOBM** | consoles, outlets | reachable, powered | an outlet cut on a fixture someone else holds |
@@ -170,6 +170,21 @@ So the interlock is local, synchronous and offline by construction, and what it 
 anything that is not a switch is asserted. That is the whole meaning of *only what the contract
 asserts*: not that the DUT is unreachable, but that the facts the fabric's safety depends on come
 from a human writing them down, not from asking the device.
+
+**Overload** — the second predicate, and the one connectivity cannot see. A forbidden pair asks
+*whether* two endpoints are common. An overload asks *what arrives* when they are: a source that can
+deliver more than a destination survives, over a path nobody declared forbidden, because there is
+nothing wrong with the path. Endpoints may declare `max_output_dbm` and `max_input_dbm`; a route is
+refused when it would put a source above a sink's rating in the same component.
+
+It composes exactly like a short does — `awg_out → dut_pin_a6` is fine, `scope_ch1 → dut_pin_a2` is
+fine, and `scope_ch1 → dut_pin_a6` is refused because of the first one. Same graph, same
+before-any-relay-moves timing, different question.
+
+Deliberately not modelled: insertion loss and pads (paths are treated as lossless, which
+over-reports rather than under-reports), and **frequency** — isolation is a curve, not a boolean,
+and this graph has no notion of one. Both ratings are *asserted*, read off a datasheet by whoever
+wrote the file.
 
 **Violation** vs **refusal** — a *violation* is a rule broken by a state (`describe_violations`
 lists all of them, for a state someone else produced). A *refusal* is a rule that stopped an
