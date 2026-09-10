@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -121,3 +122,18 @@ def test_every_bundled_topology_is_loadable():
 
 def test_as_dict_round_trips_through_json(bench):
     assert json.loads(json.dumps(bench.as_dict()))["name"] == "dut-bench"
+
+
+def test_the_topology_env_var_takes_a_bundled_name_or_a_path():
+    from pickering_lxi_mcp.factory import load_topology
+
+    assert load_topology({}).name == "dut-bench"
+    assert load_topology({"PICKERING_LXI_TOPOLOGY": "rf_bench"}).name == "rf-bench"
+
+    path = Path(Topology.bundled("rf_bench").source)
+    assert load_topology({"PICKERING_LXI_TOPOLOGY": str(path)}).name == "rf-bench"
+
+    with pytest.raises(TopologyError) as exc:
+        load_topology({"PICKERING_LXI_TOPOLOGY": "not_a_bench"})
+    assert "rf_bench" in str(exc.value), "the error has to name the ones that would have worked"
+

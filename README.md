@@ -178,7 +178,7 @@ Arming takes a literal acknowledgement — `confirm="the fixture is safe to ener
 | Variable | Default | Meaning |
 |---|---|---|
 | `PICKERING_LXI_ADDRESS` | *(unset)* | LXI unit IP, or `PXI` for local cards. Unset means the in-process simulator. |
-| `PICKERING_LXI_TOPOLOGY` | bundled `dut_bench.json` | Path to your fixture map |
+| `PICKERING_LXI_TOPOLOGY` | `dut_bench` | Path to your fixture map, or the name of a bundled one (`dut_bench`, `rf_bench`) |
 | `PICKERING_LXI_SIM_CARD` | `0` | Ask the **vendor driver** for simulated cards (`DriverModes.SIM_CARD`) |
 | `PICKERING_LXI_PORT` | `1024` | ClientBridge port |
 | `PICKERING_LXI_TIMEOUT_MS` | `5000` | Session timeout |

@@ -9,7 +9,7 @@ Validate it yourself:
 
 ```bash
 pickering-lxi-mcp-validate src/pickering_lxi_mcp/topologies/rf_bench.json
-PICKERING_LXI_TOPOLOGY=src/pickering_lxi_mcp/topologies/rf_bench.json pickering-lxi-mcp
+PICKERING_LXI_TOPOLOGY=rf_bench pickering-lxi-mcp
 ```
 
 ---
