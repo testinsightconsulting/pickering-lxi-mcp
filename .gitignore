@@ -13,3 +13,11 @@ build/
 # Business documents that live alongside this working copy but are not part of
 # the published project.
 *.pdf
+
+# Working exports of the figures and the site. The published copies are the
+# ones under docs/ and site/; these are the renders and bundles they came from.
+# Anchored to the root so they can never match a committed figure of the same
+# name, such as docs/lab-rack.png.
+/lab-rack.png
+/project-page-preview.jpg
+/pickering-lxi-mcp-pages-files.zip
