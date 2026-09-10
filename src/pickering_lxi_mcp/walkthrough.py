@@ -14,6 +14,10 @@ chassis before the run, behind the server's back. That is arranging the world,
 not a step -- it is how a walkthrough can start from a rack somebody else left
 switched, which is the state the recovery path exists for and the one you cannot
 reach through the tool surface by definition.
+
+A spec may also carry ``topology``: the name of a bundled topology to run
+against, so a walkthrough can pin itself to the bench it describes. Omitted, the
+default bundled bench is used.
 """
 
 from __future__ import annotations
@@ -25,8 +29,10 @@ from pathlib import Path
 from typing import Any
 
 from . import tools
+from .driver import build_backend
 from .factory import build_session
 from .session import ChassisSession
+from .topology import Topology
 
 _REF = re.compile(r"^\{\{(\w+)\.([\w.]+)\}\}$")
 
@@ -109,8 +115,18 @@ def arrange(session: ChassisSession, given: list[dict[str, Any]]) -> None:
     session.reconcile()
 
 
+def session_for(spec: dict[str, Any]) -> ChassisSession:
+    """The bench a spec runs against: the one it names, or the default."""
+
+    name = spec.get("topology")
+    if not name:
+        return build_session(env={})
+    topology = Topology.bundled(name)
+    return ChassisSession.build(backend=build_backend(topology.cards, env={}), topology=topology)
+
+
 def run(spec: dict[str, Any], session: ChassisSession | None = None) -> WalkthroughResult:
-    session = session or build_session(env={})
+    session = session or session_for(spec)
     if spec.get("given"):
         arrange(session, spec["given"])
     result = WalkthroughResult(name=spec.get("name", "walkthrough"))

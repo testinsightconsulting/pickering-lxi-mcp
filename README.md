@@ -98,6 +98,9 @@ Three consequences worth naming:
 
 ![Anatomy of a switch topology](docs/switch-topology-anatomy.png)
 
+A fully worked bench — real model numbers, cabling schedule, the four network planes and a
+validated topology — is in **[docs/EXAMPLE-BENCH.md](docs/EXAMPLE-BENCH.md)**.
+
 Terms used precisely here — *fabric domain*, *unowned crosspoint*, *endpoint*, *reservation* as
 distinct from *lease* — are defined with worked examples in **[GLOSSARY.md](GLOSSARY.md)**.
 

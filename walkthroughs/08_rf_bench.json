@@ -1,0 +1,90 @@
+{
+  "name": "rf bench: four refusals, four different causes",
+  "topology": "rf_bench",
+  "steps": [
+    {
+      "id": "plan_direct",
+      "tool": "plan_route",
+      "args": {"from_endpoint": "sig_gen_out", "to_endpoint": "dut_rx_direct"},
+      "expect": {"hops": 1, "permitted": false, "requires_arming": true}
+    },
+    {
+      "id": "plan_padded",
+      "tool": "plan_route",
+      "args": {"from_endpoint": "sig_gen_out", "to_endpoint": "dut_rx_padded"},
+      "expect": {"hops": 1, "permitted": true, "refusal": null, "requires_arming": true}
+    },
+    {
+      "id": "res",
+      "tool": "reserve_chassis",
+      "args": {"owner": "engineer-a"},
+      "expect": {"owner": "engineer-a"}
+    },
+    {
+      "id": "arm",
+      "tool": "arm_interlock",
+      "args": {"token": "{{res.token}}", "confirm": "the fixture is safe to energise"},
+      "expect": {"armed": true}
+    },
+    {
+      "id": "padded",
+      "tool": "route_signal",
+      "args": {"token": "{{res.token}}", "from_endpoint": "sig_gen_out", "to_endpoint": "dut_rx_padded"},
+      "expect": {"status": "open"}
+    },
+    {
+      "id": "exclusive",
+      "tool": "route_signal",
+      "args": {"token": "{{res.token}}", "from_endpoint": "sig_gen_out", "to_endpoint": "power_sensor"},
+      "expect_error": "InterlockError"
+    },
+    {
+      "id": "analyser",
+      "tool": "route_signal",
+      "args": {"token": "{{res.token}}", "from_endpoint": "dut_tx", "to_endpoint": "analyser_in"},
+      "expect": {"status": "open"}
+    },
+    {
+      "id": "closure_limit",
+      "tool": "route_signal",
+      "args": {"token": "{{res.token}}", "from_endpoint": "noise_source", "to_endpoint": "analyser_in"},
+      "expect_error": "InterlockError"
+    },
+    {
+      "id": "rx_intact",
+      "tool": "subunit_state",
+      "args": {"card": "rf_rx", "subunit": 1},
+      "expect": {"closed_count": 1}
+    },
+    {
+      "id": "vcc",
+      "tool": "route_signal",
+      "args": {"token": "{{res.token}}", "from_endpoint": "psu_pos", "to_endpoint": "dut_vcc"},
+      "expect": {"status": "open"}
+    },
+    {
+      "id": "short",
+      "tool": "route_signal",
+      "args": {"token": "{{res.token}}", "from_endpoint": "gnd", "to_endpoint": "dut_vcc"},
+      "expect_error": "InterlockError"
+    },
+    {
+      "id": "matrix_intact",
+      "tool": "subunit_state",
+      "args": {"card": "gp_matrix", "subunit": 1},
+      "expect": {"closed_count": 1}
+    },
+    {
+      "id": "domains",
+      "tool": "list_fabric_domains",
+      "args": {},
+      "expect": {"domain_count": 2, "topology": "rf-bench"}
+    },
+    {
+      "id": "free",
+      "tool": "release_chassis",
+      "args": {"token": "{{res.token}}"},
+      "expect": {"status": "released"}
+    }
+  ]
+}

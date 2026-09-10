@@ -4,11 +4,11 @@
     { "id": "id",      "tool": "chassis_identify", "expect": { "backend": "simulator", "topology": "dut-bench", "open_routes": 0, "interlock_armed": false } },
     { "id": "verify",  "tool": "verify_topology", "expect": { "ok": true, "problems": [] } },
     { "id": "plan",    "tool": "plan_route", "args": { "from_endpoint": "dmm_hi", "to_endpoint": "tc_1" },
-                       "expect": { "hops": 2, "permitted": false, "already_open": false } },
+                       "expect": { "hops": 2, "permitted": true, "requires_arming": true, "already_open": false } },
 
     { "id": "res",     "tool": "reserve_chassis", "args": { "owner": "walkthrough" }, "expect": { "owner": "walkthrough" } },
     { "id": "arm",     "tool": "arm_interlock", "args": { "token": "{{res.token}}", "confirm": "the fixture is safe to energise" }, "expect": { "armed": true } },
-    { "id": "plan2",   "tool": "plan_route", "args": { "from_endpoint": "dmm_hi", "to_endpoint": "tc_1" }, "expect": { "permitted": true, "refusal": null } },
+    { "id": "plan2",   "tool": "plan_route", "args": { "from_endpoint": "dmm_hi", "to_endpoint": "tc_1" }, "expect": { "permitted": true, "refusal": null, "requires_arming": false } },
 
     { "id": "r1",      "tool": "route_signal", "args": { "token": "{{res.token}}", "from_endpoint": "scope_ch1", "to_endpoint": "dut_pin_a1" },
                        "expect": { "status": "open", "route_id": "dut_pin_a1<->scope_ch1",

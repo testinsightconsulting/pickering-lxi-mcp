@@ -32,6 +32,11 @@ jobs:
       - name: Deterministic tool walkthroughs (hard gate)
         run: pickering-lxi-mcp-walkthrough walkthroughs
 
+      # Every shipped topology must survive the file-only checks. A fixture map
+      # that cannot be reviewed without a rack is one nobody reviews.
+      - name: Validate the shipped topologies
+        run: pickering-lxi-mcp-validate src/pickering_lxi_mcp/topologies
+
   build:
     runs-on: ubuntu-latest
     steps:

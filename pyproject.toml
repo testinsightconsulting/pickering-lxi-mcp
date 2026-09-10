@@ -48,6 +48,7 @@ Issues = "https://github.com/testinsightconsulting/pickering-lxi-mcp/issues"
 [project.scripts]
 pickering-lxi-mcp = "pickering_lxi_mcp.server:main"
 pickering-lxi-mcp-walkthrough = "pickering_lxi_mcp.walkthrough:main"
+pickering-lxi-mcp-validate = "pickering_lxi_mcp.validate:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pickering_lxi_mcp"]

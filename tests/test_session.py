@@ -167,9 +167,30 @@ def test_direct_control_still_answers_to_the_interlocks(armed):
 
 def test_plan_is_a_dry_run(session):
     plan = session.plan("scope_ch1", "dut_pin_a1")
-    assert plan["permitted"] is False, "the interlock is not armed yet"
-    assert "not armed" in plan["refusal"]
+    assert plan["hops"] == 1
     assert session.subunit_state("matrix_a", 1)["closed_count"] == 0
+
+
+def test_plan_separates_the_route_from_the_session(session):
+    """Arming is a fact about the session, not about whether the route is safe."""
+    plan = session.plan("scope_ch1", "dut_pin_a1")
+    assert plan["permitted"] is True, "nothing about this route is unsafe"
+    assert plan["refusal"] is None
+    assert plan["requires_arming"] is True
+    assert plan["interlock_armed"] is False
+
+
+def test_plan_still_reports_a_real_refusal_before_arming(session):
+    """The point of the split: substantive refusals are not masked by the gate."""
+    token = session.reserve(owner="pytest").token
+    session.arm(token, CONFIRM)
+    session.route(token, "psu_pos", "dut_pin_a1")
+    session.disarm(token)
+
+    plan = session.plan("gnd", "dut_pin_a1")
+    assert plan["requires_arming"] is True
+    assert plan["permitted"] is False
+    assert "electrically common" in plan["refusal"], "the short, not the arm state"
 
 
 def test_verify_topology_agrees_with_the_simulator(session):

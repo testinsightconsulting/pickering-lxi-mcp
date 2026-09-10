@@ -1,0 +1,271 @@
+{
+  "name": "rf-bench",
+  "description": "A worked RF + LAN bench. Pickering 60-103-001 18-slot LXI chassis: two 40-785B-521 SP6T RF multiplexers (source side and receive side, 18 GHz 50 ohm SMA) and one 40-series general-purpose matrix for DC and control lines. Model numbers are real; every rating is asserted from a datasheet and marked as such in docs/EXAMPLE-BENCH.md.",
+  "cards": {
+    "rf_src": {
+      "bus": 4,
+      "device": 1,
+      "card_id": "40-785B-521 SP6T 18GHz 50R SMA",
+      "subunits": [
+        {
+          "subunit": 1,
+          "type": "MUX",
+          "rows": 1,
+          "columns": 6,
+          "closure_limit": 1,
+          "settle_time_us": 15000
+        }
+      ]
+    },
+    "rf_rx": {
+      "bus": 4,
+      "device": 2,
+      "card_id": "40-785B-521 SP6T 18GHz 50R SMA",
+      "subunits": [
+        {
+          "subunit": 1,
+          "type": "MUX",
+          "rows": 1,
+          "columns": 6,
+          "closure_limit": 1,
+          "settle_time_us": 15000
+        }
+      ]
+    },
+    "gp_matrix": {
+      "bus": 4,
+      "device": 3,
+      "card_id": "40-series general-purpose matrix (model to suit pin count)",
+      "subunits": [
+        {
+          "subunit": 1,
+          "type": "MATRIX",
+          "rows": 6,
+          "columns": 12,
+          "closure_limit": 8,
+          "settle_time_us": 3000
+        }
+      ]
+    }
+  },
+  "endpoints": {
+    "sig_gen_out": {
+      "card": "rf_src",
+      "subunit": 1,
+      "line": "row",
+      "index": 1,
+      "role": "source",
+      "max_output_dbm": 26.0,
+      "description": "Keysight N5182B MXG, Opt 1EA. +26 dBm typical, 10 MHz\u20133 GHz. Datasheet maximum, not the current setting."
+    },
+    "dut_rx_direct": {
+      "card": "rf_src",
+      "subunit": 1,
+      "line": "column",
+      "index": 1,
+      "role": "dut",
+      "max_input_dbm": 10.0,
+      "description": "DUT receiver, straight SMA. Asserted from the DUT's own absolute-maximum rating."
+    },
+    "dut_rx_padded": {
+      "card": "rf_src",
+      "subunit": 1,
+      "line": "column",
+      "index": 2,
+      "role": "dut",
+      "max_input_dbm": 30.0,
+      "description": "Same DUT receiver through a fixed 20 dB pad. The endpoint IS the pad input, so +30 dBm here delivers +10 dBm to the DUT."
+    },
+    "loop_src": {
+      "card": "rf_src",
+      "subunit": 1,
+      "line": "column",
+      "index": 3,
+      "role": "signal",
+      "description": "Calibration loop, source end. Patched to loop_rx."
+    },
+    "power_sensor": {
+      "card": "rf_src",
+      "subunit": 1,
+      "line": "column",
+      "index": 4,
+      "role": "instrument",
+      "max_input_dbm": 20.0,
+      "description": "Average power sensor. Rating asserted \u2014 confirm against your model."
+    },
+    "analyser_in": {
+      "card": "rf_rx",
+      "subunit": 1,
+      "line": "row",
+      "index": 1,
+      "role": "instrument",
+      "max_input_dbm": 30.0,
+      "description": "Keysight N9020B MXA. +30 dBm average total power, per the N9020B specifications guide."
+    },
+    "dut_tx": {
+      "card": "rf_rx",
+      "subunit": 1,
+      "line": "column",
+      "index": 1,
+      "role": "dut",
+      "max_output_dbm": 23.0,
+      "description": "DUT transmitter at full output (+23 dBm), reverse-power rated +20 dBm. Both asserted from the DUT's specification.",
+      "max_input_dbm": 20.0
+    },
+    "dut_ref_clk": {
+      "card": "rf_rx",
+      "subunit": 1,
+      "line": "column",
+      "index": 2,
+      "role": "dut",
+      "description": "DUT 10 MHz reference output, +10 dBm max input. Asserted.",
+      "max_input_dbm": 10.0
+    },
+    "loop_rx": {
+      "card": "rf_rx",
+      "subunit": 1,
+      "line": "column",
+      "index": 3,
+      "role": "signal",
+      "description": "Calibration loop, receive end. Patched to loop_src."
+    },
+    "noise_source": {
+      "card": "rf_rx",
+      "subunit": 1,
+      "line": "column",
+      "index": 4,
+      "role": "source",
+      "max_output_dbm": 15.0,
+      "description": "Calibrated noise source for NF measurement."
+    },
+    "psu_pos": {
+      "card": "gp_matrix",
+      "subunit": 1,
+      "line": "row",
+      "index": 1,
+      "role": "source",
+      "description": "Bench supply, positive"
+    },
+    "psu_neg": {
+      "card": "gp_matrix",
+      "subunit": 1,
+      "line": "row",
+      "index": 2,
+      "role": "source",
+      "description": "Bench supply, negative"
+    },
+    "gnd": {
+      "card": "gp_matrix",
+      "subunit": 1,
+      "line": "row",
+      "index": 3,
+      "role": "ground",
+      "description": "Fixture ground"
+    },
+    "dmm_hi": {
+      "card": "gp_matrix",
+      "subunit": 1,
+      "line": "row",
+      "index": 4,
+      "role": "instrument",
+      "description": "DMM high"
+    },
+    "dmm_lo": {
+      "card": "gp_matrix",
+      "subunit": 1,
+      "line": "row",
+      "index": 5,
+      "role": "instrument",
+      "description": "DMM low"
+    },
+    "dio_enable": {
+      "card": "gp_matrix",
+      "subunit": 1,
+      "line": "row",
+      "index": 6,
+      "role": "source",
+      "description": "Digital I/O line driving the DUT enable"
+    },
+    "dut_vcc": {
+      "card": "gp_matrix",
+      "subunit": 1,
+      "line": "column",
+      "index": 1,
+      "role": "dut"
+    },
+    "dut_gnd": {
+      "card": "gp_matrix",
+      "subunit": 1,
+      "line": "column",
+      "index": 2,
+      "role": "dut"
+    },
+    "dut_enable": {
+      "card": "gp_matrix",
+      "subunit": 1,
+      "line": "column",
+      "index": 3,
+      "role": "dut"
+    },
+    "dut_reset": {
+      "card": "gp_matrix",
+      "subunit": 1,
+      "line": "column",
+      "index": 4,
+      "role": "dut"
+    },
+    "dut_testpt1": {
+      "card": "gp_matrix",
+      "subunit": 1,
+      "line": "column",
+      "index": 5,
+      "role": "dut"
+    },
+    "dut_testpt2": {
+      "card": "gp_matrix",
+      "subunit": 1,
+      "line": "column",
+      "index": 6,
+      "role": "dut"
+    }
+  },
+  "links": [
+    [
+      {
+        "card": "rf_src",
+        "subunit": 1,
+        "line": "column",
+        "index": 3
+      },
+      {
+        "card": "rf_rx",
+        "subunit": 1,
+        "line": "column",
+        "index": 3
+      }
+    ]
+  ],
+  "interlocks": {
+    "require_arm": true,
+    "max_closures_per_subunit": 8,
+    "enforce_power_limits": true,
+    "forbidden_pairs": [
+      [
+        "psu_pos",
+        "gnd"
+      ],
+      [
+        "psu_pos",
+        "psu_neg"
+      ],
+      [
+        "dio_enable",
+        "psu_pos"
+      ]
+    ],
+    "exclusive_endpoints": [
+      "psu_pos",
+      "sig_gen_out"
+    ]
+  }
+}

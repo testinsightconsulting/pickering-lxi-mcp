@@ -246,14 +246,31 @@ class ChassisSession:
         Nothing is switched. This is the tool an agent should reach for first:
         it turns "would this be allowed" into a question that can be asked
         without taking the chassis.
+
+        The arm gate is deliberately excluded from the verdict. Arming is a gate
+        on *doing*, not a property of the route, and a dry run whose answer is
+        always "you have not armed yet" hides the thing the caller asked about —
+        whether this route shorts something, overloads something, or exceeds a
+        closure limit. Those are facts about the fixture; arming is a fact about
+        the session. They are reported separately.
         """
 
         path = self.topology.find_path(source, target)
         result: dict[str, Any] = path.as_dict()
         result["already_open"] = route_id(source, target) in self.routes
+        result["interlock_armed"] = self.armed
+        result["requires_arming"] = not self.armed
 
         try:
-            self._check(path)
+            interlocks.check_route(
+                self.topology,
+                self.policy,
+                closed=self._closed_operations(),
+                proposed=path.operations,
+                endpoints=(path.source, path.target),
+                armed=True,
+                endpoints_in_use=self._endpoints_in_use(),
+            )
         except InterlockError as exc:
             result["permitted"] = False
             result["refusal"] = str(exc)

@@ -99,3 +99,23 @@ def test_the_cli_entry_point_returns_zero_on_a_clean_run(monkeypatch, capsys):
 def test_the_cli_entry_point_complains_about_an_empty_directory(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.argv", ["pickering-lxi-mcp-walkthrough", str(tmp_path)])
     assert walkthrough.main() == 1
+
+
+def test_a_spec_can_pin_itself_to_a_named_bench():
+    session = walkthrough.session_for({"topology": "rf_bench"})
+    assert session.topology.name == "rf-bench"
+    assert walkthrough.session_for({}).topology.name == "dut-bench"
+
+
+def test_the_worked_bench_in_the_docs_is_a_gated_walkthrough():
+    """docs/EXAMPLE-BENCH.md narrates a transcript. CI has to own it, or it rots."""
+
+    spec = walkthrough.load(WALKTHROUGHS / "08_rf_bench.json")
+    assert spec["topology"] == "rf_bench"
+    doc = (Path(__file__).resolve().parents[1] / "docs" / "EXAMPLE-BENCH.md").read_text(
+        encoding="utf-8"
+    )
+    assert "08_rf_bench.json" in doc, "the doc must point at the walkthrough that proves it"
+    for endpoint in ("dut_rx_padded", "power_sensor", "analyser_in", "noise_source", "dut_vcc"):
+        assert endpoint in doc
+
