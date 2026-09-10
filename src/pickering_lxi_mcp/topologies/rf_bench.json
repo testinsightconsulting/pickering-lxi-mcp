@@ -1,11 +1,11 @@
 {
   "name": "rf-bench",
-  "description": "A worked RF + LAN bench. Pickering 60-103-001 18-slot LXI chassis: two 40-785B-521 SP6T RF multiplexers (source side and receive side, 18 GHz 50 ohm SMA) and one 40-series general-purpose matrix for DC and control lines. Model numbers are real; every rating is asserted from a datasheet and marked as such in docs/EXAMPLE-BENCH.md.",
+  "description": "A worked RF + LAN bench. Pickering 60-103D-001 18-slot LXI/USB chassis: two 40-785C-521 SP6T RF multiplexers (source side and receive side, 18 GHz 50 ohm SMA) and one 40-series general-purpose matrix for DC and control lines. Model numbers are real; every rating is asserted from a datasheet and marked as such in docs/EXAMPLE-BENCH.md.",
   "cards": {
     "rf_src": {
       "bus": 4,
       "device": 1,
-      "card_id": "40-785B-521 SP6T 18GHz 50R SMA",
+      "card_id": "40-785C-521 SP6T 18GHz 50R SMA",
       "subunits": [
         {
           "subunit": 1,
@@ -20,7 +20,7 @@
     "rf_rx": {
       "bus": 4,
       "device": 2,
-      "card_id": "40-785B-521 SP6T 18GHz 50R SMA",
+      "card_id": "40-785C-521 SP6T 18GHz 50R SMA",
       "subunits": [
         {
           "subunit": 1,

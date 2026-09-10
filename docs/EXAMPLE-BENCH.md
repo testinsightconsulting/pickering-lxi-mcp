@@ -18,14 +18,14 @@ PICKERING_LXI_TOPOLOGY=rf_bench pickering-lxi-mcp
 
 | Role | Model | What the topology takes from it |
 |---|---|---|
-| Switching chassis | **Pickering 60-103-001**, 18-slot LXI modular chassis | one server, one management address |
-| RF mux — source side | **Pickering 40-785B-521**, single SP6T, 18 GHz, 50 Ω SMA | `rf_src`, 1×6 MUX, one channel at a time |
-| RF mux — receive side | **Pickering 40-785B-521** | `rf_rx`, 1×6 MUX |
+| Switching chassis | **Pickering 60-103D-001**, 18-slot LXI/USB modular chassis, 4U | one server, one management address |
+| RF mux — source side | **Pickering 40-785C-521**, single failsafe SP6T, 18 GHz, 50 Ω SMA, 3 slots | `rf_src`, 1×6 MUX, one channel at a time |
+| RF mux — receive side | **Pickering 40-785C-521** | `rf_rx`, 1×6 MUX |
 | GP matrix — DC and control | 40-series general-purpose matrix, model to suit pin count | `gp_matrix`, 6×12 |
 | Signal generator | **Keysight N5182B MXG**, Opt 1EA | `sig_gen_out`, **+26 dBm** max output |
 | Signal analyser | **Keysight N9020B MXA** | `analyser_in`, **+30 dBm** max input |
 | Power sensor | average power sensor | `power_sensor`, +20 dBm *(asserted)* |
-| Traffic generator | **Spirent TestCenter SPT-N4U** | not switched — see §4 |
+| Traffic generator | **VIAVI TestCenter SPT-N4U** (formerly Spirent), 2-slot, 4U | not switched — see §4 |
 | DUT | a radio with an Ethernet management port | every `dut_*` endpoint *(asserted)* |
 
 **The two numbers the interlock actually turns on:**
@@ -46,27 +46,35 @@ Everything else marked *(asserted)* comes from a datasheet by way of whoever wro
 Two racks, because the fabric domains follow the wiring and it is easier to keep them separate if
 the hardware is.
 
+![The worked bench, racked](lab-rack.png)
+
+*Illustration, not a photograph — instruments are drawn generically at their real rack heights.
+Regenerate with `python docs/lab-rack.py --png`.*
+
 ```
 RACK A — signal                          RACK B — control and traffic
 ┌────────────────────────────────┐       ┌────────────────────────────────┐
-│ 42U                            │       │                                │
-│  ── N5182B MXG                 │       │  ── OOBM switch  (isolated)    │
-│  ── N9020B MXA                 │       │  ── console server             │
-│  ── power sensor / meter       │       │  ── switched PDU (A feed)      │
-│  ──                            │       │  ── switched PDU (B feed)      │
-│  ── 60-103-001 LXI chassis     │       │  ──                            │
-│       slot 1  40-785B-521 src  │       │  ── mgmt switch — instruments  │
-│       slot 2  40-785B-521 rx   │       │  ── mgmt switch — DUT + data   │
-│       slot 3  GP matrix        │       │  ──                            │
-│  ──                            │       │  ── SPT-N4U TestCenter         │
-│  ── DUT                        │       │  ── jump host (only multi-homed│
-│  ── patch panel, SMA           │       │       device in either rack)   │
+│ 18U shown                      │       │                                │
+│ ── cable manager               │       │ ── OOBM switch  (isolated)     │
+│ ── N5182B MXG              2U  │       │ ── console server              │
+│ ── N9020B MXA              4U  │       │ ──                             │
+│ ── power sensor · noise src    │       │ ── mgmt switch A — instruments │
+│ ── 60-103D-001 LXI chassis 4U  │       │ ── mgmt switch B — DUT mgmt    │
+│      slots 1–3  40-785C-521 src│       │ ── cable manager               │
+│      slots 4–6  40-785C-521 rx │       │ ── SPT-N4U TestCenter      4U  │
+│      slot 7     GP matrix      │       │ ──                             │
+│ ── vented 1U (chassis air)     │       │ ── jump host (only multi-homed │
+│ ── SMA patch panel             │       │       device in either rack)   │
+│ ── DUT                     2U  │       │ ──                             │
+│ ── DC supply · DMM         2U  │       │ ── switched PDU (A feed)       │
+│                                │       │ ── switched PDU (B feed)       │
 └────────────────────────────────┘       └────────────────────────────────┘
 ```
 
-Two things in that layout are deliberate. The **OOBM switch is its own box**, not a VLAN on the
-management switch — its independence is the entire product, and a VLAN on shared silicon is
-in-band with extra steps. And **instrument management and DUT management are separate switches**,
+Three things in that layout are deliberate. The chassis has a **vented 1U below it**: Pickering
+recommends mounting the 60-103D in 5U so it can draw air from underneath. The **OOBM switch is its
+own box**, not a VLAN on the management switch — its independence is the entire product, and a
+VLAN on shared silicon is in-band with extra steps. And **instrument management and DUT management are separate switches**,
 for the reason in §4.
 
 ---
@@ -115,7 +123,7 @@ fabric domain.
 | Plane | Carries | Subnet | Switch |
 |---|---|---|---|
 | **OOBM** | console server, both PDUs, chassis BMC | `10.10.0.0/24` | its own, isolated |
-| **Instrument management** | 60-103-001, MXG, MXA, power meter | `10.10.1.0/24` | mgmt switch A |
+| **Instrument management** | 60-103D-001, MXG, MXA, power meter | `10.10.1.0/24` | mgmt switch A |
 | **DUT management** | the DUT's mgmt port | `10.10.2.0/24` | mgmt switch B |
 | **Data** | SPT-N4U test ports ↔ DUT data ports | under test | direct cabling |
 
@@ -230,10 +238,10 @@ the DUT".
 
 ## Sources
 
-- [Pickering 60-103-001 — 18-slot LXI modular chassis](https://www.pickeringtest.com/en-us/product/lxi-modular-switching-chassis--18-slot)
-- [Pickering 40-785B-521 — PXI single SP6T RF MUX, 18 GHz, 50 Ω SMA](https://www.pickeringtest.com/en-us/product/40-785b-single-6-ch-rf-mux-18ghz-50ohm-sma)
+- [Pickering 60-103D-001 — 18-slot LXI/USB modular chassis](https://www.pickeringtest.com/en-us/product/60-103d-001-lxi-18-slot-modular-chassis) — and its [datasheet](https://www.pickeringtest.com/portal/web/256/content/downloads/datasheets/60-103DD.pdf) for the 4U height and the 5U mounting advice. It replaces the discontinued 60-103-001.
+- [Pickering 40-785C-521 — PXI single SP6T microwave MUX, 18 GHz, 50 Ω SMA, failsafe](https://www.pickeringtest.com/en-us/product/40-785C-521-pxi-microwave-mux-1sp6t-18ghz-50r-sma) — Pickering's recommended successor to the 40-785B-521
 - [Keysight N5182B MXG datasheet](https://www.cmc.ca/wp-content/uploads/2019/08/Agilent_N5182B_Datasheet.pdf) — max output power by band and option
 - [Keysight N9020B MXA specifications guide](https://www.keysight.com/us/en/assets/9018-04846/technical-specifications/9018-04846.pdf) — +30 dBm average total power, ±0.2 Vdc DC coupled
-- [Spirent TestCenter SPT-N4U chassis](https://www.spirent.com/Products/TestCenter/Platforms/Appliances)
+- [VIAVI TestCenter SPT-N4U compact chassis datasheet](https://www.viavisolutions.com/en-us/literature/spt-n4u-compact-chassis-data-sheets-en.pdf) — 2 module slots, 4RU
 - [LXI Security Extended Function 1.1](https://public.lxistandard.org/specifications/LXI_1.6_Specifications/LXI_Security_Extended_Function_1.1_2023-01-26.pdf) — optional; defines "Unsecure Mode"
 - [Cisco — Out-of-band management best practices](https://www.cisco.com/c/en/us/solutions/collateral/service-provider/out-of-band-best-practices-wp.html)
