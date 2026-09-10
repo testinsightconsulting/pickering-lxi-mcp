@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pickering-lxi-mcp — Pickering switching for AI agents</title>
+<meta name="description" content="An open-source MCP server that lets an LLM agent route signals through Pickering PXI/LXI switching by logical endpoint name, with connectivity-graph interlocks and a built-in chassis simulator.">
+<meta property="og:title" content="pickering-lxi-mcp — Pickering switching for AI agents">
+<meta property="og:description" content="Route signals through Pickering PXI/LXI switching by endpoint name. Refuse the short before a relay moves.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://testinsightconsulting.github.io/pickering-lxi-mcp/">
+<meta property="og:image" content="https://testinsightconsulting.github.io/pickering-lxi-mcp/img/lab-rack.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2317171A'/><circle cx='10' cy='10' r='3' fill='%23D9B25A'/><circle cx='22' cy='22' r='3' fill='%23D9B25A'/><path d='M10 10 C18 10 14 22 22 22' stroke='%23E07A45' stroke-width='2.4' fill='none'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FAF9F6; --surface:#FFFFFF; --sunk:#F2F0EA; --ink:#17171A; --muted:#5F5F66; --faint:#8C8B86;
+  --line:#E2DFD8; --line-strong:#C6C4BD;
+  --acc:#A84A17; --acc-ink:#8E3D12; --acc-soft:#F5EDE5;
+  --blue:#2B5C86; --green:#3A6647; --teal:#2F7373; --plum:#5B3A7E; --red:#9A2F2F;
+  --code-bg:#15161A; --code-ink:#E6E4DE; --code-dim:#8B8A85; --code-ok:#8CCB8C; --code-no:#F08A7A; --code-name:#F2B27E;
+  --fig:#FAF9F6;
+  --sans:Inter,"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --wrap:1120px;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#111214; --surface:#191A1D; --sunk:#16171A; --ink:#ECEAE5; --muted:#A6A59F; --faint:#7E7D78;
+    --line:#2A2B2F; --line-strong:#3A3B40;
+    --acc:#E07A45; --acc-ink:#F0A077; --acc-soft:#2A1C14;
+    --blue:#6FA3D3; --green:#7DB38C; --teal:#6DB5B5; --plum:#A88BCB; --red:#E2877C;
+    --code-bg:#0B0C0E;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 var(--sans);font-feature-settings:"cv11","ss01";-webkit-font-smoothing:antialiased}
+img{max-width:100%;display:block}
+a{color:var(--acc-ink)}
+a:hover{color:var(--acc)}
+code{font-family:var(--mono);font-size:.88em;background:var(--sunk);border:1px solid var(--line);padding:.08em .38em;border-radius:5px}
+.wrap{max-width:var(--wrap);margin:0 auto;padding-inline:24px}
+.wide{max-width:1320px;margin:0 auto;padding-inline:24px}
+
+/* nav */
+header.nav{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;align-items:center;gap:20px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font:600 15px var(--mono);color:var(--ink);text-decoration:none;white-space:nowrap}
+.brand svg{flex:none}
+.nav nav{display:flex;gap:22px;margin-left:auto;font-size:14px}
+.nav nav a{color:var(--muted);text-decoration:none}
+.nav nav a:hover{color:var(--ink)}
+.gh{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--surface);background:var(--ink);padding:7px 14px;border-radius:8px;text-decoration:none;white-space:nowrap}
+.gh:hover{color:var(--surface);opacity:.88}
+@media (max-width:820px){.nav nav{display:none}.nav .gh{margin-left:auto}}
+
+/* hero */
+.hero{padding-block:72px 28px}
+.eyebrow{font:600 12.5px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--acc)}
+h1{font-size:clamp(34px,5.6vw,60px);line-height:1.04;letter-spacing:-.035em;font-weight:800;margin:14px 0 20px;max-width:15ch}
+.lead{font-size:clamp(17px,2vw,20px);line-height:1.55;color:var(--muted);max-width:62ch;margin:0}
+.lead strong{color:var(--ink);font-weight:600}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:9px;font-weight:600;font-size:15px;text-decoration:none;border:1px solid var(--line-strong);color:var(--ink);background:var(--surface)}
+.btn:hover{border-color:var(--ink);color:var(--ink)}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn.primary:hover{background:var(--acc-ink);border-color:var(--acc-ink);color:#fff}
+.meta{display:flex;flex-wrap:wrap;gap:6px 10px;margin-top:26px;font:500 13px var(--mono);color:var(--faint)}
+.meta span::before{content:"·";color:var(--line-strong);margin-right:10px}
+.meta span:first-child::before{content:""}
+
+/* figures */
+figure{margin:0}
+.fig{background:var(--fig);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 0 rgba(0,0,0,.02),0 18px 50px -28px rgba(30,25,15,.35)}
+.fig a{display:block}
+.fig img{width:100%;height:auto}
+figcaption{font-size:14px;color:var(--muted);padding:14px 4px 0;max-width:90ch;line-height:1.55}
+figcaption b{color:var(--ink);font-weight:600}
+.hero-fig{margin-top:44px}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:14px;background:var(--surface);margin-top:40px}
+.stat{padding:22px 22px 20px;border-left:1px solid var(--line)}
+.stat:first-child{border-left:0}
+.stat b{display:block;font-size:34px;letter-spacing:-.03em;line-height:1;font-weight:800}
+.stat span{display:block;margin-top:8px;font-size:13.5px;color:var(--muted);line-height:1.4}
+@media (max-width:760px){.stats{grid-template-columns:1fr 1fr}.stat:nth-child(3){border-left:0}.stat:nth-child(n+3){border-top:1px solid var(--line)}}
+
+/* sections */
+section{padding:84px 0 0}
+.kicker{font:600 12.5px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--acc);margin:0 0 10px}
+h2{font-size:clamp(26px,3.4vw,38px);line-height:1.12;letter-spacing:-.025em;font-weight:800;margin:0 0 16px;max-width:24ch}
+h3{font-size:18px;letter-spacing:-.01em;margin:0 0 6px;font-weight:700}
+.prose{max-width:68ch;color:var(--muted);font-size:17px}
+.prose p{margin:0 0 14px}
+.prose strong{color:var(--ink);font-weight:600}
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:48px;align-items:start}
+@media (max-width:900px){.split{grid-template-columns:1fr;gap:24px}}
+
+.split.rev{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+@media (max-width:900px){.split.rev{grid-template-columns:1fr}}
+/* terminal */
+.term{background:var(--code-bg);color:var(--code-ink);border-radius:12px;font:13.5px/1.7 var(--mono);overflow:hidden;border:1px solid #000}
+.term .bar{display:flex;align-items:center;gap:7px;padding:10px 14px;border-bottom:1px solid #26272c;color:var(--code-dim);font-size:12px}
+.term .bar i{width:10px;height:10px;border-radius:50%;background:#3a3b40;display:inline-block}
+.term .bar em{font-style:normal;margin-left:8px}
+.term pre{margin:0;padding:16px 18px;overflow-x:auto;white-space:pre;font-size:12.5px}
+.term .c{color:var(--code-dim)}
+.term .ok{color:var(--code-ok)}
+.term .no{color:var(--code-no);font-weight:600}
+.term .n{color:var(--code-name)}
+.term .p{color:#9BB8D6}
+
+/* instrument cards */
+.gear{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:34px}
+@media (max-width:960px){.gear{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:620px){.gear{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 20px 18px;position:relative;display:flex;flex-direction:column}
+.card::before{content:"";position:absolute;left:20px;right:20px;top:-1px;height:3px;border-radius:0 0 3px 3px;background:var(--c,var(--acc))}
+.vendor{font:600 11.5px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.model{font:700 19px/1.25 var(--sans);letter-spacing:-.01em;margin:4px 0 2px}
+.role{font-size:14px;color:var(--muted);margin:0 0 12px}
+.card dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:13.5px}
+.card dt{color:var(--faint)}
+.card dd{margin:0;color:var(--ink)}
+.card dd code{font-size:12.5px;color:var(--acc-ink);background:var(--acc-soft);border-color:transparent}
+.card .src{margin-top:auto;padding-top:14px;font-size:13px}
+.card .src a{text-decoration:none}
+.card .src a:hover{text-decoration:underline}
+.card.dim{background:transparent;border-style:dashed}
+.note{font-size:14px;color:var(--muted);margin-top:18px;max-width:90ch}
+
+/* feature grid */
+.feats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:34px}
+@media (max-width:900px){.feats{grid-template-columns:1fr 1fr}}
+@media (max-width:600px){.feats{grid-template-columns:1fr}}
+.feat{background:var(--surface);padding:24px 22px}
+.feat .ix{font:600 12px var(--mono);color:var(--acc)}
+.feat h3{margin-top:8px}
+.feat p{margin:0;font-size:15px;color:var(--muted)}
+
+/* refusal chips */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 0}
+.chip{font:600 12.5px var(--sans);padding:5px 11px;border-radius:999px;border:1px solid var(--line-strong);color:var(--ink);background:var(--surface)}
+.chip i{font-style:normal;color:var(--red);margin-right:6px}
+
+/* gallery */
+.gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:34px}
+@media (max-width:900px){.gallery{grid-template-columns:1fr}}
+.gallery .fig{border-radius:10px}
+.gallery figcaption{padding-top:10px;font-size:13.5px}
+
+/* tools */
+.tiers{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin-top:30px}
+@media (max-width:800px){.tiers{grid-template-columns:minmax(0,1fr)}}
+.tier{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.tier header{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}
+.tier header b{font-size:16px}
+.tier header span{font-size:13px;color:var(--muted)}
+.tier.mut header{background:var(--acc-soft)}
+.tier.mut header b{color:var(--acc-ink)}
+.tier ul{list-style:none;margin:0;padding:6px 0}
+.tier li{display:grid;grid-template-columns:minmax(0,190px) 1fr;gap:12px;padding:7px 18px;font-size:14px;color:var(--muted);border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.tier li:first-child{border-top:0}
+.tier li code{background:none;border:0;padding:0;color:var(--ink);font-weight:500;font-size:13px}
+@media (max-width:480px){.tier li{grid-template-columns:1fr;gap:0}}
+
+/* lifecycle */
+.life{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:26px;font:500 13.5px var(--mono)}
+.life span{padding:7px 12px;border-radius:8px;background:var(--surface);border:1px solid var(--line)}
+.life span.m{border-color:color-mix(in srgb,var(--acc) 45%,var(--line));color:var(--acc-ink)}
+.life b{color:var(--faint);font-weight:400}
+
+/* quick start */
+.qs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin-top:30px}
+@media (max-width:860px){.qs{grid-template-columns:minmax(0,1fr)}}
+.qs h3{font-size:15px;margin:0 0 10px}
+.qs .full{grid-column:1/-1}
+.copy{margin-left:auto;background:none;border:1px solid #33343a;color:var(--code-dim);font:500 11.5px var(--sans);padding:3px 9px;border-radius:6px;cursor:pointer}
+.copy:hover{color:var(--code-ink);border-color:#55565c}
+
+/* footer */
+footer{margin-top:100px;border-top:1px solid var(--line);padding:40px 0 56px;font-size:14px;color:var(--muted)}
+footer .wrap{display:grid;grid-template-columns:1.4fr 1fr;gap:30px}
+@media (max-width:760px){footer .wrap{grid-template-columns:1fr}}
+footer .links{display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:flex-end;align-content:start}
+@media (max-width:760px){footer .links{justify-content:flex-start}}
+footer .links a{color:var(--ink);text-decoration:none;font-weight:500}
+footer .links a:hover{color:var(--acc)}
+footer small{display:block;margin-top:10px;color:var(--faint);font-size:12.5px;line-height:1.55}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="pickering-lxi-mcp home">
+      <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#17171A"/><circle cx="10" cy="10" r="3" fill="#D9B25A"/><circle cx="22" cy="22" r="3" fill="#D9B25A"/><path d="M10 10 C18 10 14 22 22 22" stroke="#E07A45" stroke-width="2.4" fill="none"/></svg>
+      pickering-lxi-mcp
+    </a>
+    <nav aria-label="Sections">
+      <a href="#bench">The bench</a>
+      <a href="#graph">Interlocks</a>
+      <a href="#tools">Tools</a>
+      <a href="#start">Quick start</a>
+    </nav>
+    <a class="gh" href="https://github.com/testinsightconsulting/pickering-lxi-mcp">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</header>
+
+<main id="top">
+  <div class="wrap hero">
+    <div class="eyebrow">Open-source MCP server · Pickering PXI / LXI switching</div>
+    <h1>Signal routing an agent can be trusted with.</h1>
+    <p class="lead">
+      <strong>pickering-lxi-mcp</strong> lets an LLM agent route signals through Pickering switching by
+      logical endpoint name — <em>connect the signal generator to the DUT receiver</em>, not
+      <em>close crosspoint (1,2) on card 4</em> — and refuses, before a single relay moves, any route
+      that would make a forbidden pair of endpoints electrically common.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/testinsightconsulting/pickering-lxi-mcp">View the repository</a>
+      <a class="btn" href="#bench">See the worked bench</a>
+      <a class="btn" href="#start">Run it with no hardware</a>
+    </div>
+    <div class="meta"><span>MIT</span><span>Python 3.10 – 3.13</span><span>stdio · streamable HTTP</span><span>built-in chassis simulator</span></div>
+  </div>
+
+  <div class="wide hero-fig">
+    <figure>
+      <div class="fig">
+        <a href="img/lab-rack.png" title="Open full size">
+          <img src="img/lab-rack.svg" width="1880" height="1400"
+               alt="Two equipment racks. Rack A, signal: a Keysight N5182B MXG signal generator, a Keysight N9020B MXA signal analyser, a power sensor and noise source, a Pickering 60-103D-001 LXI chassis holding two 40-785C-521 SP6T microwave multiplexers and a general-purpose matrix, an SMA patch panel, the DUT, and a DC supply and DMM, all cabled with SMA and a DC harness. Rack B, control and traffic: out-of-band, instrument and DUT management switches, a console server, a VIAVI TestCenter SPT-N4U cabled directly to the DUT's data ports, a jump host and two switched PDUs. An inset maps every connector on the Pickering modules to its endpoint name.">
+        </a>
+      </div>
+      <figcaption>
+        Every model number is real hardware and only the DUT is invented.
+        Cabling, subnets and endpoint names come straight from the shipped
+        <a href="https://github.com/testinsightconsulting/pickering-lxi-mcp/blob/main/src/pickering_lxi_mcp/topologies/rf_bench.json"><code>rf_bench.json</code></a>,
+        and the relay state is walkthrough 08 part-way through, with three routes open. This is an illustration drawn from the topology, not a photograph.
+      </figcaption>
+    </figure>
+  </div>
+
+  <div class="wrap">
+    <div class="stats" role="list">
+      <div class="stat" role="listitem"><b>22</b><span>MCP tools: 13 observe, 9 mutate, split structurally</span></div>
+      <div class="stat" role="listitem"><b>8</b><span>deterministic tool walkthroughs, run as the hard CI gate</span></div>
+      <div class="stat" role="listitem"><b>170+</b><span>tests, with no chassis, no vendor driver and no lab</span></div>
+      <div class="stat" role="listitem"><b>0</b><span>relays moved when a route is refused. Routes are refused whole.</span></div>
+    </div>
+  </div>
+
+  <!-- why -->
+  <section id="why">
+    <div class="wrap split">
+      <div>
+        <p class="kicker">Why switching first</p>
+        <h2>Every instrument in the rack is reached through the matrix.</h2>
+      </div>
+      <div class="prose">
+        <p>Switching is the routing layer of a test rack. The signal generator, the analyser, the supply
+        and the DMM all reach the DUT <em>through</em> it. That makes it the one server a multi-vendor agent
+        cannot do without.</p>
+        <p>It is also where a mistake is not a wrong reading. On a switching matrix, a mistake is
+        <strong>a short</strong>. This server exists to make that impossible to request by accident,
+        whether the requester is an agent or a tired engineer at 2 a.m.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- the bench -->
+  <section id="bench">
+    <div class="wrap">
+      <p class="kicker">The hardware</p>
+      <h2>Real instruments, real ratings, one contract.</h2>
+      <div class="prose"><p>The worked example is an RF, DC and LAN bench. The two numbers the interlock actually
+      turns on are datasheet maximums: what the instrument <strong>can</strong> do, not what it is set to, because
+      the setting is one SCPI command away from changing.</p></div>
+
+      <div class="gear">
+        <article class="card" style="--c:var(--acc)">
+          <div class="vendor">Pickering Interfaces</div>
+          <div class="model">60-103D-001</div>
+          <p class="role">18-slot LXI/USB modular switching chassis</p>
+          <dl>
+            <dt>Form</dt><dd>4U, full rack width, takes 3U PXI modules</dd>
+            <dt>Control</dt><dd>Gigabit LAN · USB 3 · LXI 1.4</dd>
+            <dt>In the model</dt><dd>one server process, one address</dd>
+          </dl>
+          <div class="src"><a href="https://www.pickeringtest.com/en-us/product/60-103d-001-lxi-18-slot-modular-chassis">Product page ↗</a></div>
+        </article>
+        <article class="card" style="--c:var(--acc)">
+          <div class="vendor">Pickering Interfaces · ×2</div>
+          <div class="model">40-785C-521</div>
+          <p class="role">PXI single SP6T microwave multiplexer, failsafe</p>
+          <dl>
+            <dt>RF</dt><dd>18 GHz, 50 Ω, SMA · 3 slots wide</dd>
+            <dt>Physics</dt><dd>one channel at a time → <code>closure_limit: 1</code></dd>
+            <dt>Endpoints</dt><dd><code>rf_src</code> · <code>rf_rx</code></dd>
+          </dl>
+          <div class="src"><a href="https://www.pickeringtest.com/en-us/product/40-785C-521-pxi-microwave-mux-1sp6t-18ghz-50r-sma">Product page ↗</a></div>
+        </article>
+        <article class="card" style="--c:var(--acc)">
+          <div class="vendor">Pickering Interfaces</div>
+          <div class="model">40-series GP matrix</div>
+          <p class="role">General-purpose matrix for DC and control lines. Pick the model to suit your pin count.</p>
+          <dl>
+            <dt>Shape</dt><dd>6 × 12 in the topology</dd>
+            <dt>Rows</dt><dd><code>psu_pos</code> <code>gnd</code> <code>dmm_hi</code> …</dd>
+            <dt>Columns</dt><dd><code>dut_vcc</code> <code>dut_enable</code> …</dd>
+          </dl>
+          <div class="src"><a href="https://www.pickeringtest.com/products/pxi">Pickering PXI range ↗</a></div>
+        </article>
+        <article class="card" style="--c:var(--faint)">
+          <div class="vendor">Keysight</div>
+          <div class="model">N5182B MXG, Opt 1EA</div>
+          <p class="role">X-Series RF vector signal generator</p>
+          <dl>
+            <dt>Rating</dt><dd><b>+26 dBm</b> typical max out, 10 MHz – 3 GHz</dd>
+            <dt>Endpoint</dt><dd><code>sig_gen_out</code>, exclusive</dd>
+          </dl>
+          <div class="src"><a href="https://www.keysight.com/us/en/product/N5182B/mxg-x-series-rf-vector-signal-generator-9-khz-6-ghz.html">Product page ↗</a></div>
+        </article>
+        <article class="card" style="--c:var(--faint)">
+          <div class="vendor">Keysight</div>
+          <div class="model">N9020B MXA</div>
+          <p class="role">X-Series signal analyser</p>
+          <dl>
+            <dt>Rating</dt><dd><b>+30 dBm</b> avg total power · ±0.2 Vdc DC-coupled</dd>
+            <dt>Endpoint</dt><dd><code>analyser_in</code></dd>
+          </dl>
+          <div class="src"><a href="https://www.keysight.com/us/en/product/N9020B/n9020b-mxa-signal-analyzer-multi-touch-10-hz-50-ghz.html">Product page ↗</a></div>
+        </article>
+        <article class="card" style="--c:var(--blue)">
+          <div class="vendor">VIAVI · formerly Spirent</div>
+          <div class="model">TestCenter SPT-N4U</div>
+          <p class="role">2-slot, 4U traffic-generation chassis</p>
+          <dl>
+            <dt>Plane</dt><dd>data. Cabled straight to the DUT</dd>
+            <dt>Topology</dt><dd>absent on purpose, because a switch topology contains only what the matrix can switch</dd>
+          </dl>
+          <div class="src"><a href="https://www.viavisolutions.com/en-us/literature/spt-n4u-compact-chassis-data-sheets-en.pdf">Datasheet ↗</a></div>
+        </article>
+      </div>
+      <p class="note">The DUT, a radio with an Ethernet management port, is the one invented element. Every rating
+      that comes from a datasheet by way of whoever wrote the file is marked <em>asserted</em>, and
+      <code>verify_topology</code> lists it as unverifiable for exactly that reason.
+      Full cabling schedule and the four network planes:
+      <a href="https://github.com/testinsightconsulting/pickering-lxi-mcp/blob/main/docs/EXAMPLE-BENCH.md">docs/EXAMPLE-BENCH.md</a>.</p>
+    </div>
+  </section>
+
+  <!-- the graph -->
+  <section id="graph">
+    <div class="wrap split">
+      <div class="prose">
+        <p class="kicker">The problem it actually solves</p>
+        <h2 style="color:var(--ink)">The dangerous mistake is a graph, not a number.</h2>
+        <p>Nobody ever asks to short the supply to ground. They route the supply to a DUT pin, which is
+        reasonable. Then they route that pin to ground for a continuity check, which is also reasonable. The short
+        is the <strong>composition</strong> of two correct requests, and neither looks wrong when it is made.</p>
+        <p>So the server asks a different question. Given every crosspoint closed right now, every crosspoint this route
+        would close and every hard-wired patch lead, <strong>does any forbidden pair end up in the same connected
+        component?</strong> The server answers that before a relay moves. If the answer is yes, it refuses the route whole.</p>
+      </div>
+      <div class="term" role="figure" aria-label="Transcript: the third route is refused because it would short the supply to ground">
+        <div class="bar"><i></i><i></i><i></i><em>dut_bench · simulator</em></div>
+<pre><span class="p">&gt;</span> route_signal <span class="n">psu_pos</span> -&gt; <span class="n">dut_pin_a1</span>   <span class="ok">ok</span>  matrix_a/sub1(1,1)
+<span class="p">&gt;</span> route_signal <span class="n">dmm_hi</span>  -&gt; <span class="n">dut_pin_a1</span>   <span class="ok">ok</span>  matrix_a/sub1(6,1)
+                 <span class="c">measuring under power is fine</span>
+<span class="p">&gt;</span> route_signal <span class="n">gnd</span>     -&gt; <span class="n">dut_pin_a1</span>   <span class="no">REFUSED</span>
+    this route would make 'psu_pos' and 'gnd'
+    electrically common, which the topology forbids.
+    <span class="c">Nothing was switched.</span>
+<span class="p">&gt;</span> route_signal <span class="n">gnd</span>     -&gt; <span class="n">dut_pin_a5</span>   <span class="ok">ok</span>  matrix_a/sub1(3,5)
+                 <span class="c">same route, different pin</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- four refusals -->
+  <section id="refusals">
+    <div class="wrap split rev">
+      <div class="term" role="figure" aria-label="Transcript of walkthrough 08 on the RF bench">
+        <div class="bar"><i></i><i></i><i></i><em>walkthroughs/08_rf_bench.json · runs in CI</em></div>
+<pre><span class="p">plan_route</span>   <span class="n">sig_gen_out</span> → <span class="n">dut_rx_direct</span>
+             <span class="no">permitted: false</span> <span class="c">+26 dBm into +10, 16 dB over</span>
+<span class="p">plan_route</span>   <span class="n">sig_gen_out</span> → <span class="n">dut_rx_padded</span>
+             <span class="ok">permitted: true</span>  <span class="c">← the pad is the answer</span>
+
+<span class="p">reserve_chassis</span> owner=engineer-a    <span class="ok">token</span>
+<span class="p">arm_interlock</span>   confirm="the fixture is safe to energise"
+
+<span class="p">route_signal</span> <span class="n">sig_gen_out</span>  → <span class="n">dut_rx_padded</span>  <span class="ok">open</span>
+<span class="p">route_signal</span> <span class="n">sig_gen_out</span>  → <span class="n">power_sensor</span>   <span class="no">refused</span>
+             <span class="c">'sig_gen_out' is exclusive and already routed</span>
+<span class="p">route_signal</span> <span class="n">dut_tx</span>       → <span class="n">analyser_in</span>    <span class="ok">open</span>
+<span class="p">route_signal</span> <span class="n">noise_source</span> → <span class="n">analyser_in</span>    <span class="no">refused</span>
+             <span class="c">2 closures on rf_rx, over the SP6T's limit of 1</span>
+<span class="p">route_signal</span> <span class="n">psu_pos</span>      → <span class="n">dut_vcc</span>        <span class="ok">open</span>
+<span class="p">route_signal</span> <span class="n">gnd</span>          → <span class="n">dut_vcc</span>        <span class="no">refused</span>
+             <span class="c">would make psu_pos and gnd electrically common</span>
+
+<span class="p">release_chassis</span>                      <span class="ok">clears every route, disarms</span></pre>
+      </div>
+      <div class="prose">
+        <p class="kicker">On the bench above</p>
+        <h2 style="color:var(--ink)">Four refusals, four different causes.</h2>
+        <p>Every line is actual behaviour of <code>rf_bench.json</code> on the simulation backend, pinned as a
+        walkthrough. If the server's answers change, the build fails and this page doesn't quietly go stale.</p>
+        <div class="chips">
+          <span class="chip"><i>✕</i>power limit</span>
+          <span class="chip"><i>✕</i>exclusive endpoint</span>
+          <span class="chip"><i>✕</i>SP6T closure limit</span>
+          <span class="chip"><i>✕</i>connectivity interlock</span>
+        </div>
+        <p style="margin-top:18px">None of them depends on the agent being careful, and none switched anything before refusing.
+        The plan answers <em>is this route permitted</em> separately from <em>is the interlock armed</em>, so
+        “you haven't armed yet” never masks “this would destroy the DUT”.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- safety features -->
+  <section id="safety">
+    <div class="wrap">
+      <p class="kicker">Built to be pointed at a real fixture</p>
+      <h2>The interlocks a relay driver doesn't give you.</h2>
+      <div class="feats">
+        <div class="feat"><div class="ix">01 · connectivity</div><h3>Short-circuit refusal by graph</h3><p>Forbidden pairs are checked across closed crosspoints, proposed closures and patch leads, spanning cards.</p></div>
+        <div class="feat"><div class="ix">02 · reconciliation</div><h3>Reads the chassis before it believes anything</h3><p>If it finds relays nobody owns, it refuses to switch until you <code>adopt</code> or <code>clear</code> them. It won't adopt a fixture that is already shorted.</p></div>
+        <div class="feat"><div class="ix">03 · planning</div><h3>Plan first, then switch all or nothing</h3><p><code>plan_route</code> is a dry run that needs no lease. A route that fails mid-flight is rolled back.</p></div>
+        <div class="feat"><div class="ix">04 · ownership</div><h3>Reference-counted routes</h3><p>Tearing one route down never opens a crosspoint another route is still holding up. <code>unroute_signal</code> reports what it retained.</p></div>
+        <div class="feat"><div class="ix">05 · arbitration</div><h3>One rack, one truth</h3><p>A time-boxed reservation gates every mutation. Observation is never gated, so you can always see a chassis someone else holds.</p></div>
+        <div class="feat"><div class="ix">06 · intent</div><h3>Arming means something</h3><p>Arming takes the literal string <code>"the fixture is safe to energise"</code>, not a boolean a model fills in from context.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- architecture -->
+  <section id="arch">
+    <div class="wrap">
+      <p class="kicker">Where it sits</p>
+      <h2>One server in a multi-vendor agent stack.</h2>
+      <div class="prose"><p>The agent talks to each instrument's MCP server in a star. In the signal plane, every one of
+      those instruments reaches the DUT through the Pickering matrix. Three figures carry the design; each opens full size.</p></div>
+    </div>
+    <div class="wide">
+      <div class="gallery">
+        <figure>
+          <div class="fig"><a href="img/multi-vendor-architecture.png"><img src="img/multi-vendor-architecture.png" alt="Architecture: engineers and CI drive one agent through an MCP gateway to pickering-lxi-mcp, scope, TestCenter, SNE-X and CyberFlood servers; in the signal plane every instrument reaches the DUT through the Pickering matrix."></a></div>
+          <figcaption><b>Multi-vendor lab, one agent.</b> Where state lives, and what stands between two callers reaching for the same relay.</figcaption>
+        </figure>
+        <figure>
+          <div class="fig"><a href="img/switch-topology-anatomy.png"><img src="img/switch-topology-anatomy.png" alt="Anatomy of a switch topology: endpoints, cards, subunits, patch links and fabric domains."></a></div>
+          <figcaption><b>Anatomy of a switch topology.</b> Endpoints, patch leads and fabric domains: the map an agent routes over.</figcaption>
+        </figure>
+        <figure>
+          <div class="fig"><a href="img/four-planes.png"><img src="img/four-planes.png" alt="Four planes, one topology: out-of-band management, management, data and signal planes around one DUT."></a></div>
+          <figcaption><b>Four planes, one topology.</b> The same devices, four meanings of “connected”. This repo implements the signal plane.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- tools -->
+  <section id="tools">
+    <div class="wrap">
+      <p class="kicker">Tool surface</p>
+      <h2>Observe freely. Mutate with a token.</h2>
+      <div class="prose"><p>Every tool declares a tier. One dispatch point refuses a mutate tool without a live
+      reservation, and there is no passthrough to the vendor driver. A test asserts there never will be.</p></div>
+      <div class="tiers">
+        <div class="tier">
+          <header><b>observe · 13</b><span>never gated</span></header>
+          <ul>
+            <li><code>chassis_identify</code><span>backend, driver, topology, status</span></li>
+            <li><code>list_cards</code><span>cards, subunits, sizes, closure limits</span></li>
+            <li><code>list_endpoints</code><span>the names this topology can route between</span></li>
+            <li><code>list_fabric_domains</code><span>the independently leasable units</span></li>
+            <li><code>list_routes</code><span>connections currently held open</span></li>
+            <li><code>plan_route</code><span><b>dry run</b>: closures and whether permitted</span></li>
+            <li><code>subunit_state</code><span>every closed crosspoint on a subunit</span></li>
+            <li><code>crosspoint_state</code><span>one crosspoint, and who holds it</span></li>
+            <li><code>interlock_status</code><span>armed or not, and the policy in force</span></li>
+            <li><code>reconciliation_status</code><span>what was found closed at startup</span></li>
+            <li><code>verify_topology</code><span>the file's claims vs. the chassis</span></li>
+            <li><code>reserve_chassis</code><span>time-boxed reservation; returns a token</span></li>
+            <li><code>list_tool_tiers</code><span>plan before you reserve</span></li>
+          </ul>
+        </div>
+        <div class="tier mut">
+          <header><b>mutate · 9</b><span>reservation token required</span></header>
+          <ul>
+            <li><code>adopt_existing_state</code><span>keep startup crosspoints; count them in checks</span></li>
+            <li><code>clear_existing_state</code><span>open what was found; start from known-safe</span></li>
+            <li><code>arm_interlock</code><span>explicit acknowledgement before any relay moves</span></li>
+            <li><code>disarm_interlock</code><span>stop new routing; leave routes up</span></li>
+            <li><code>route_signal</code><span>connect two endpoints by the shortest path</span></li>
+            <li><code>unroute_signal</code><span>tear one route down, reference counted</span></li>
+            <li><code>clear_all_routes</code><span>open everything, forget everything</span></li>
+            <li><code>set_crosspoint</code><span>direct control, still interlock-checked</span></li>
+            <li><code>release_chassis</code><span>clear, disarm, release the reservation</span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="life" aria-label="Chassis lifecycle">
+        <span>connect</span><b>→</b><span>reconcile</span><b>→</b><span>discover</span><b>→</b><span>reserve</span><b>→</b><span class="m">arm</span><b>→</b><span class="m">route</span><b>→</b><span>observe</span><b>→</b><span class="m">unroute</span><b>→</b><span class="m">release</span>
+      </div>
+      <p class="note">Releasing tears the fixture down, because an agent that crashes mid-run must not leave a bench live.</p>
+    </div>
+  </section>
+
+  <!-- quick start -->
+  <section id="start">
+    <div class="wrap">
+      <p class="kicker">Quick start</p>
+      <h2>Clone, test, run. No hardware needed.</h2>
+      <div class="prose"><p>The default backend is an in-process chassis simulator, on purpose. The failure mode worth
+      fearing is a server that silently reaches for a rack, not one that refuses to.</p></div>
+      <div class="qs">
+        <div class="full">
+          <h3>1 · Try it on a laptop</h3>
+          <div class="term"><div class="bar"><i></i><i></i><i></i><em>shell</em><button class="copy" type="button">Copy</button></div>
+<pre>git clone https://github.com/testinsightconsulting/pickering-lxi-mcp
+cd pickering-lxi-mcp
+pip install -e ".[dev]"
+pytest -q
+pickering-lxi-mcp-walkthrough walkthroughs   <span class="c"># the CI gate</span>
+pickering-lxi-mcp                            <span class="c"># MCP on stdio, simulated</span></pre></div>
+        </div>
+        <div class="full">
+          <h3>2 · Point it at a real rack</h3>
+          <div class="term"><div class="bar"><i></i><i></i><i></i><em>shell</em><button class="copy" type="button">Copy</button></div>
+<pre>pip install -e ".[hardware]"                 <span class="c"># adds pilxi</span>
+PICKERING_LXI_ADDRESS=192.168.1.50 pickering-lxi-mcp   <span class="c"># LXI by IP</span>
+PICKERING_LXI_ADDRESS=PXI          pickering-lxi-mcp   <span class="c"># local PXI</span>
+PICKERING_LXI_TOPOLOGY=./my_bench.json pickering-lxi-mcp
+pickering-lxi-mcp-validate ./my_bench.json   <span class="c"># review, no rack</span></pre></div>
+        </div>
+        <div>
+          <h3>3 · Connect any MCP client</h3>
+          <div class="term"><div class="bar"><i></i><i></i><i></i><em>mcp config</em><button class="copy" type="button">Copy</button></div>
+<pre>{ "mcpServers": {
+    "switching": { "command": "pickering-lxi-mcp" }
+} }</pre></div>
+        </div>
+        <div>
+          <h3>4 · Share one rack between agents</h3>
+          <div class="term"><div class="bar"><i></i><i></i><i></i><em>shell</em><button class="copy" type="button">Copy</button></div>
+<pre>pickering-lxi-mcp --transport streamable-http \
+  --host 0.0.0.0 --port 8000
+<span class="c"># clients: { "url": "http://lab-host:8000/mcp" }</span></pre></div>
+        </div>
+      </div>
+      <p class="note">There are two kinds of simulation, and you should use both, in this order. <code>SimBackend</code> (the default) answers
+      <em>is the routing logic right</em>. <code>PICKERING_LXI_SIM_CARD=1</code> runs the <strong>real</strong>
+      ClientBridge driver against cards that aren't in the rack, and answers <em>is the driver integration right</em>.
+      Where the simulator and a real card disagree, the simulator is wrong and gets fixed.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <b style="color:var(--ink)">pickering-lxi-mcp</b> · MIT licensed · built by
+      <a href="https://testinsightconsulting.com">Test In Sight Consulting</a>, who build MCP servers for test &amp; measurement.
+      <small>Independent open-source project. It isn't affiliated with or endorsed by Pickering Interfaces, Keysight
+      Technologies or VIAVI Solutions, and product names are trademarks of their owners. The software was written from scratch against the public
+      <code>pilxi</code> wrapper. The simulator, example topologies and endpoint names were invented for this repository.</small>
+    </div>
+    <div class="links">
+      <a href="https://github.com/testinsightconsulting/pickering-lxi-mcp#readme">README</a>
+      <a href="https://github.com/testinsightconsulting/pickering-lxi-mcp/blob/main/docs/EXAMPLE-BENCH.md">Worked bench</a>
+      <a href="https://github.com/testinsightconsulting/pickering-lxi-mcp/blob/main/PATTERNS.md">Patterns</a>
+      <a href="https://github.com/testinsightconsulting/pickering-lxi-mcp/blob/main/GLOSSARY.md">Glossary</a>
+      <a href="https://github.com/testinsightconsulting/pickering-lxi-mcp/blob/main/LICENSE">License</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+document.querySelectorAll('.copy').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var pre = b.closest('.term').querySelector('pre');
+    var txt = pre.innerText.split('\n').map(function (l) { return l.replace(/\s+#.*$/, ''); }).join('\n').trim();
+    navigator.clipboard.writeText(txt).then(function () {
+      b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1400);
+    });
+  });
+});
+</script>
+</body>
+</html>

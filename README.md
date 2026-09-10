@@ -1,6 +1,14 @@
 # pickering-lxi-mcp
 
+[![CI](https://github.com/testinsightconsulting/pickering-lxi-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/testinsightconsulting/pickering-lxi-mcp/actions/workflows/ci.yml)
+[![Project page](https://img.shields.io/badge/project%20page-live-A84A17)](https://testinsightconsulting.github.io/pickering-lxi-mcp/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-17171A)](LICENSE)
+
 An MCP server that lets an LLM agent route signals through Pickering PXI/LXI switching — by logical endpoint name, with the interlocks that make that safe to point at a real fixture.
+
+[![The worked bench, racked: a Pickering 60-103D-001 LXI chassis with two 40-785C-521 SP6T multiplexers and a GP matrix, cabled between a Keysight N5182B MXG, a Keysight N9020B MXA, a VIAVI TestCenter SPT-N4U and the DUT](docs/lab-rack.png)](https://testinsightconsulting.github.io/pickering-lxi-mcp/)
+
+<sub>The [worked bench](docs/EXAMPLE-BENCH.md), racked: real model numbers at their real rack heights, cabled exactly as the shipped <code>rf_bench.json</code> says, relay state mid-way through walkthrough 08. An illustration drawn from the topology, not a photograph. **[Project page →](https://testinsightconsulting.github.io/pickering-lxi-mcp/)**</sub>
 
 Switching is the routing layer of a test rack. Every other instrument an agent might drive is reached *through* it, which makes it the one server a multi-vendor agent cannot do without, and the one where a mistake is not a wrong reading but a short.
 
@@ -8,7 +16,7 @@ It ships with an in-process chassis simulator, so `git clone && pip install -e "
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                    # 126 tests
+pytest -q                                    # 170+ tests
 pickering-lxi-mcp-walkthrough walkthroughs   # the CI gate
 pickering-lxi-mcp                            # MCP server on stdio, simulated chassis
 ```
@@ -240,6 +248,8 @@ src/pickering_lxi_mcp/
   server.py        thin MCP binding — every tool body is one call into tools.call
   topologies/      dut_bench.json, the worked example
 walkthroughs/      the gate, as data
+docs/              the worked bench, its figures, and the scripts that draw them
+site/              the project page; .github/workflows/pages.yml publishes it
 ```
 
 The MCP tool bodies are deliberately one line each. The server, the tests and the walkthroughs all go through `tools.call`, so a green walkthrough is evidence about the server rather than about a parallel test-only implementation.
